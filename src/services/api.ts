@@ -139,9 +139,16 @@ export const api = {
     });
   },
 
-  async deleteAllPlayers(): Promise<{ success: boolean; deletedCount: number; message: string }> {
-    return apiFetch<{ success: boolean; deletedCount: number; message: string }>('/api/players', {
+  async deleteAllPlayers(): Promise<{ success: boolean; archivedCount: number; message: string }> {
+    return apiFetch<{ success: boolean; archivedCount: number; message: string }>('/api/players', {
       method: 'DELETE',
+    });
+  },
+
+  async permanentlyDeleteAllPlayers(confirmation: string): Promise<{ success: boolean; deletedCount: number; message: string }> {
+    return apiFetch<{ success: boolean; deletedCount: number; message: string }>('/api/players/permanent', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation }),
     });
   },
 
