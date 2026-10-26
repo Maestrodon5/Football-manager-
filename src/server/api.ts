@@ -948,6 +948,14 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     res.status(400).json({ error: 'Unlock this session before replacing players.' });
     return;
   }
+  if (sessionRecord.status === 'completed') {
+    res.status(400).json({ error: 'Completed session lineups are historical records and cannot be replaced.' });
+    return;
+  }
+  if (type === 'permanent' && effective_date && effective_date > sessionRecord.session_date) {
+    res.status(400).json({ error: 'The effective date cannot be after this session date. Choose a session on or after the effective date to preserve historical lineups.' });
+    return;
+  }
 
   const originalProfile = queryOne<any>('SELECT * FROM players WHERE id = ?', [original_player_id]);
   if (!originalProfile) {
