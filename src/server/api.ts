@@ -12,12 +12,17 @@ import {
 } from './db.js';
 import { generateBalancedTeams } from './teamGenerator.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'pitchmaster_captain_jwt_secret_change_in_production';
+const JWT_SECRET = process.env.JWT_SECRET || 'pitchmaster_development_only_secret';
+const hasSecureJwtSecret = process.env.NODE_ENV !== 'production' || Boolean(process.env.JWT_SECRET);
 
 export const apiRouter = express.Router();
 
 // Captain Authentication Middleware
 export function requireCaptainAuth(req: Request, res: Response, next: NextFunction) {
+  if (!hasSecureJwtSecret) {
+    res.status(503).json({ error: 'Captain actions are disabled until a strong JWT_SECRET is configured.' });
+    return;
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Unauthorized: Captain login required to perform this action.' });
@@ -39,6 +44,10 @@ export function requireCaptainAuth(req: Request, res: Response, next: NextFuncti
 // AUTHENTICATION
 // ----------------------------------------------------
 apiRouter.post('/auth/login', (req: Request, res: Response) => {
+  if (!hasSecureJwtSecret) {
+    res.status(503).json({ error: 'Captain authentication is not configured. Set JWT_SECRET in the deployment environment.' });
+    return;
+  }
   const { username, email, password } = req.body;
   const identifier = (email || username || '').trim().toLowerCase();
 
@@ -76,6 +85,16 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
 });
 
 apiRouter.post('/auth/captain-auto-token', (req: Request, res: Response) => {
+  // Passwordless captain access is only intended for a privately protected, single-owner deployment.
+  // Never enable PERSONAL_MODE on a public, unprotected URL.
+  if (process.env.PERSONAL_MODE !== 'true') {
+    res.status(403).json({ error: 'Personal captain mode is disabled. Protect this deployment, then set PERSONAL_MODE=true.' });
+    return;
+  }
+  if (!hasSecureJwtSecret) {
+    res.status(503).json({ error: 'Set a strong JWT_SECRET before enabling personal captain access.' });
+    return;
+  }
   const captain = queryOne<{ id: string; email: string }>('SELECT id, email FROM captain_accounts LIMIT 1');
   if (!captain) {
     res.status(404).json({ error: 'Captain account not found' });
