@@ -213,7 +213,7 @@ export const api = {
   async getReplacementRecommendations(
     sessionId: string,
     playerId: string
-  ): Promise<{ original_player: Player; recommendations: any[] }> {
+  ): Promise<{ original_player: Player; recommendations: any[]; team_lineups: any[]; repeated_teammate_pairs: any[] }> {
     return apiFetch(`/api/sessions/${sessionId}/replacements/recommendations?player_id=${playerId}`);
   },
 
