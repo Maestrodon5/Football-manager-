@@ -25,6 +25,7 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
   const [selectedId, setSelectedId] = useState('');
   const [source, setSource] = useState<'existing' | 'new'>('existing');
   const [replacementType, setReplacementType] = useState<ReplacementType>('TEMPORARY');
+  const [applyMode, setApplyMode] = useState<'replacement_only' | 'rebalance'>('replacement_only');
   const [reason, setReason] = useState('');
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10));
   const [sourceTeamAction, setSourceTeamAction] = useState('');
@@ -99,7 +100,8 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
     const vacancyNote = sourceTeam
       ? (sourceTeamAction === 'fill_vacancy' ? ` Team ${sourceTeam} will receive the selected unassigned player.` : ` Team ${sourceTeam} will have one fewer player; this uneven lineup is explicitly approved.`)
       : '';
-    const confirmation = `Replace ${originalPlayer.name} in Team ${destinationTeam} with ${summary}?\n\nType: ${replacementType}.\nReason: ${reason.trim()}.\n${vacancyNote}\n\nReview the affected lineups before confirming.`;
+    const applyDescription = applyMode === 'rebalance' ? 'Apply replacement and rebalance all teams using the fairness engine' : 'Apply replacement only; leave other team assignments unchanged';
+    const confirmation = `Replace ${originalPlayer.name} in Team ${destinationTeam} with ${summary}?\n\nType: ${replacementType}.\nReason: ${reason.trim()}.\nAction: ${applyDescription}.\n${vacancyNote}\n\nReview the affected lineups before confirming.`;
     if (!window.confirm(confirmation)) return;
     try {
       setSubmitting(true);
@@ -109,6 +111,7 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
         replacement_type: replacementType,
         reason: reason.trim(),
         effective_date: effectiveDate,
+        apply_mode: applyMode,
         source_team_action: sourceTeam ? sourceTeamAction : undefined,
         source_fill_player_id: sourceTeamAction === 'fill_vacancy' ? sourceFillPlayerId : undefined,
         profile_changes: source === 'existing' && edited && profileChangesSaved ? {
@@ -215,8 +218,20 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
             </section>
           )}
 
+          <section className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">4. How should the teams be updated?</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button type="button" onClick={() => setApplyMode('replacement_only')} className={`rounded-xl border p-3 text-left ${applyMode === 'replacement_only' ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-700 bg-slate-950'}`}>
+                <strong className="block text-sm text-white">Apply Replacement Only</strong><span className="mt-1 block text-xs text-slate-400">Change only the selected replacement. Any source-team vacancy must be explicitly resolved above.</span>
+              </button>
+              <button type="button" onClick={() => setApplyMode('rebalance')} className={`rounded-xl border p-3 text-left ${applyMode === 'rebalance' ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-700 bg-slate-950'}`}>
+                <strong className="block text-sm text-white">Apply Replacement and Rebalance Teams</strong><span className="mt-1 block text-xs text-slate-400">Run the existing fairness engine across the current session lineup. Review the generated lineup after confirmation.</span>
+              </button>
+            </div>
+          </section>
+
           <section className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">4. Reason and final review</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">5. Reason and final review</h3>
             <div><label className={labelClass}>Reason for replacement *</label><input required value={reason} onChange={e => setReason(e.target.value)} className={inputClass} placeholder="Absence, injury, availability, etc." /></div>
             <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-slate-300">
               <p className="font-bold text-white">Proposed change</p>
