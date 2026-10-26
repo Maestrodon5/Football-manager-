@@ -156,7 +156,8 @@ apiRouter.get('/players', (req: Request, res: Response) => {
   const includeArchived = req.query.includeArchived === 'true';
 
   let sql = `
-    SELECT id, full_name, full_name as name, position, skill_level,
+    SELECT id, full_name, full_name as name, position, secondary_position, skill_level,
+           COALESCE(skill_rating, CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
            active as is_active,
            CASE WHEN archived_at IS NOT NULL THEN 1 ELSE 0 END as is_archived,
            created_at, updated_at, archived_at
@@ -188,8 +189,16 @@ apiRouter.get('/players', (req: Request, res: Response) => {
 });
 
 apiRouter.post('/players', requireCaptainAuth, (req: Request, res: Response) => {
-  const { name, full_name, position, skill_level } = req.body;
+  const { name, full_name, position, secondary_position, skill_level } = req.body;
+  let { skill_rating } = req.body;
   const playerName = (full_name || name || '').trim();
+  if (skill_rating !== undefined) {
+    skill_rating = Number(skill_rating);
+    if (!Number.isInteger(skill_rating) || skill_rating < 1 || skill_rating > 10) {
+      res.status(400).json({ error: 'Skill rating must be an integer from 1 to 10.' });
+      return;
+    }
+  }
 
   if (!playerName || !position || !skill_level) {
     res.status(400).json({ error: 'Player name, valid position, and skill level are required.' });
@@ -206,21 +215,27 @@ apiRouter.post('/players', requireCaptainAuth, (req: Request, res: Response) => 
     return;
   }
 
-  const countRes = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM players');
-  const nextNum = (countRes?.cnt || 0) + 1;
-  const id = `PLY-${String(nextNum).padStart(3, '0')}`;
+  if (secondary_position && !['Striker', 'Midfielder', 'Defender'].includes(secondary_position)) {
+    res.status(400).json({ error: 'Secondary position must be Striker, Midfielder, or Defender.' });
+    return;
+  }
+  const rating = skill_rating ?? (skill_level === 'Top' ? 9 : skill_level === 'Medium' ? 6 : 3);
+  const normalizedSkill = rating >= 8 ? 'Top' : rating >= 5 ? 'Medium' : 'Normal';
+  const id = `PLY-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const now = new Date().toISOString();
 
   run(
-    `INSERT INTO players (id, full_name, position, skill_level, active, created_at, updated_at, archived_at)
-     VALUES (?, ?, ?, ?, 1, ?, ?, NULL);`,
-    [id, playerName, position, skill_level, now, now]
+    `INSERT INTO players (id, full_name, position, secondary_position, skill_rating, skill_level, active, created_at, updated_at, archived_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL);`,
+    [id, playerName, position, secondary_position || null, rating, normalizedSkill, now, now]
   );
 
   logAudit('PLAYER_CREATED', 'PLAYER', id, { full_name: playerName, position, skill_level });
 
   const created = queryOne<any>(
-    'SELECT id, full_name, full_name as name, position, skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?',
+    'SELECT id, full_name, full_name as name, position, secondary_position,
+            COALESCE(skill_rating, CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
+            skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?',
     [id]
   );
   res.status(201).json({ player: created });
@@ -228,8 +243,16 @@ apiRouter.post('/players', requireCaptainAuth, (req: Request, res: Response) => 
 
 apiRouter.put('/players/:id', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, full_name, position, skill_level, is_active, active } = req.body;
+  const { name, full_name, position, secondary_position, skill_level, is_active, active } = req.body;
+  let { skill_rating } = req.body;
   const targetName = full_name || name;
+  if (skill_rating !== undefined) {
+    skill_rating = Number(skill_rating);
+    if (!Number.isInteger(skill_rating) || skill_rating < 1 || skill_rating > 10) {
+      res.status(400).json({ error: 'Skill rating must be an integer from 1 to 10.' });
+      return;
+    }
+  }
   const targetActive = active !== undefined ? active : is_active;
 
   const existing = queryOne<any>('SELECT * FROM players WHERE id = ?', [id]);
@@ -247,20 +270,31 @@ apiRouter.put('/players/:id', requireCaptainAuth, (req: Request, res: Response) 
     res.status(400).json({ error: 'Invalid skill level' });
     return;
   }
+  if (secondary_position && !['Striker', 'Midfielder', 'Defender'].includes(secondary_position)) {
+    res.status(400).json({ error: 'Invalid secondary position' });
+    return;
+  }
+  const normalizedSkill = skill_rating !== undefined
+    ? (skill_rating >= 8 ? 'Top' : skill_rating >= 5 ? 'Medium' : 'Normal')
+    : skill_level;
 
   const now = new Date().toISOString();
   run(
     `UPDATE players
      SET full_name = COALESCE(?, full_name),
          position = COALESCE(?, position),
-         skill_level = COALESCE(?, skill_level),
+         secondary_position = COALESCE(?, secondary_position),
+         skill_rating = COALESCE(?, skill_rating),
+         skill_level = COALESCE(?, skill_level), 
          active = COALESCE(?, active),
          updated_at = ?
      WHERE id = ?;`,
     [
       targetName ? targetName.trim() : null,
       position || null,
-      skill_level || null,
+      secondary_position || null,
+      skill_rating !== undefined ? skill_rating : null,
+      normalizedSkill || null,
       targetActive !== undefined ? (targetActive ? 1 : 0) : null,
       now,
       id,
@@ -277,22 +311,45 @@ apiRouter.put('/players/:id', requireCaptainAuth, (req: Request, res: Response) 
 });
 
 apiRouter.delete('/players', requireCaptainAuth, (req: Request, res: Response) => {
+  const count = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM players WHERE archived_at IS NULL');
+  const archivedCount = count?.cnt || 0;
+  const now = new Date().toISOString();
+  try {
+    transaction(() => {
+      run('UPDATE players SET active = 0, archived_at = COALESCE(archived_at, ?), updated_at = ? WHERE archived_at IS NULL;', [now, now]);
+    });
+    logAudit('ALL_PLAYERS_ARCHIVED', 'PLAYER', 'ALL', { archived_count: archivedCount });
+    res.json({
+      success: true,
+      archivedCount,
+      message: `Archived ${archivedCount} active player profile(s). Historical sessions, attendance, assignments and statistics are preserved.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to archive players. No success was recorded.' });
+  }
+});
+
+// Permanent deletion is intentionally separate from the default archive action.
+apiRouter.delete('/players/permanent', requireCaptainAuth, (req: Request, res: Response) => {
+  if (req.body?.confirmation !== 'PERMANENTLY DELETE ALL PLAYER DATA') {
+    res.status(400).json({ error: 'Type PERMANENTLY DELETE ALL PLAYER DATA to confirm permanent deletion.' });
+    return;
+  }
   const count = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM players');
   const deletedCount = count?.cnt || 0;
-
-  transaction(() => {
-    // Foreign-key cascades remove player-linked attendance, assignments,
-    // replacement records and participation rows while retaining sessions,
-    // matches, and the audit trail.
-    run('DELETE FROM players;');
-  });
-
-  logAudit('ALL_PLAYERS_DELETED', 'PLAYER', 'ALL', { deleted_count: deletedCount });
-  res.json({
-    success: true,
-    deletedCount,
-    message: `Permanently deleted ${deletedCount} player profile(s) and their linked records.`,
-  });
+  try {
+    transaction(() => {
+      run('DELETE FROM players;');
+    });
+    logAudit('ALL_PLAYER_DATA_PERMANENTLY_DELETED', 'PLAYER', 'ALL', { deleted_count: deletedCount });
+    res.json({
+      success: true,
+      deletedCount,
+      message: `Permanently deleted ${deletedCount} player profile(s) and player-linked records. Session and audit records were retained where database constraints allow.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to permanently delete player data.' });
+  }
 });
 
 apiRouter.delete('/players/:id', requireCaptainAuth, (req: Request, res: Response) => {
@@ -762,7 +819,7 @@ apiRouter.get('/sessions/:id/replacements/recommendations', (req: Request, res: 
       AND p.id NOT IN (SELECT player_id FROM team_assignments WHERE weekly_session_id = ?)
       AND (ar.status IS NULL OR ar.status NOT IN ('absent', 'injured'))
   `;
-  const candidates = queryAll<any>(candidateSql, [id, playerId, id]);
+  const candidates = queryAll<any>(candidateSql, [id, id, playerId, id, playerId]);
 
   const scored = candidates.map((c) => {
     let score = 100;
@@ -810,9 +867,10 @@ apiRouter.get('/sessions/:id/replacements/recommendations', (req: Request, res: 
 
 apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
-  const { original_player_id, replacement_player_id, replacement_type, reason, end_date } = req.body;
+  const { original_player_id, replacement_player_id, replacement_type, reason, end_date, new_player, source_team_action, source_fill_player_id, effective_date, profile_changes } = req.body;
+  let incomingPlayerId = incomingPlayerId;
 
-  if (!original_player_id || !replacement_player_id || !replacement_type || !reason) {
+  if (!original_player_id || (!incomingPlayerId && !new_player) || !replacement_type || !reason) {
     res.status(400).json({ error: 'All replacement parameters are required.' });
     return;
   }
@@ -823,20 +881,55 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     return;
   }
 
-  // Prevent duplicate assignment in this session
-  const alreadyAssigned = queryOne('SELECT id FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?', [
-    id,
-    replacement_player_id,
-  ]);
-  if (alreadyAssigned) {
-    res.status(400).json({ error: 'Replacement player is already assigned to a team in this session.' });
+  const originalProfile = queryOne<any>('SELECT * FROM players WHERE id = ?', [original_player_id]);
+  if (!originalProfile) {
+    res.status(404).json({ error: 'Outgoing player profile not found.' });
     return;
   }
+
+  if (new_player) {
+    const newName = String(new_player.full_name || new_player.name || '').trim();
+    const newPosition = new_player.position;
+    const newRating = Number(new_player.skill_rating);
+    if (!newName || !['Defender', 'Midfielder', 'Striker'].includes(newPosition) ||
+        !Number.isInteger(newRating) || newRating < 1 || newRating > 10 ||
+        (new_player.secondary_position && !['Defender', 'Midfielder', 'Striker'].includes(new_player.secondary_position))) {
+      res.status(400).json({ error: 'New player requires a full name, valid primary/optional secondary position, and skill rating from 1 to 10.' });
+      return;
+    }
+    incomingPlayerId = `PLY-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  }
+
+  const alreadyAssigned = incomingPlayerId
+    ? queryOne<any>('SELECT * FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?', [id, incomingPlayerId])
+    : null;
 
   const existingAssignment = queryOne<any>(
     'SELECT * FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?',
     [id, original_player_id]
   );
+  if (alreadyAssigned && alreadyAssigned.team_name === existingAssignment?.team_name) {
+    res.status(400).json({ error: 'The selected replacement is already in the destination team.' });
+    return;
+  }
+  if (alreadyAssigned && !['allow_uneven', 'fill_vacancy'].includes(source_team_action)) {
+    res.status(400).json({
+      error: 'This player belongs to another team. Choose an explicit source-team resolution: allow_uneven or fill_vacancy.',
+      source_team: alreadyAssigned.team_name,
+    });
+    return;
+  }
+  if (alreadyAssigned && source_team_action === 'fill_vacancy') {
+    if (!source_fill_player_id) {
+      res.status(400).json({ error: 'Choose an unassigned active player to fill the source-team vacancy.' });
+      return;
+    }
+    const fillAssigned = queryOne('SELECT id FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?', [id, source_fill_player_id]);
+    if (fillAssigned) {
+      res.status(400).json({ error: 'The source-team fill player is already assigned in this session.' });
+      return;
+    }
+  }
   if (!existingAssignment) {
     res.status(400).json({ error: 'Original player is not currently assigned to a team.' });
     return;
@@ -845,16 +938,45 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
   const now = new Date().toISOString();
   const repId = `REP-${Date.now()}`;
 
+  try {
   transaction(() => {
+    if (new_player) {
+      const newName = String(new_player.full_name || new_player.name).trim();
+      const rating = Number(new_player.skill_rating);
+      const skill = rating >= 8 ? 'Top' : rating >= 5 ? 'Medium' : 'Normal';
+      run(`INSERT INTO players (id, full_name, position, secondary_position, skill_rating, skill_level, active, created_at, updated_at, archived_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL);`,
+        [incomingPlayerId, newName, new_player.position, new_player.secondary_position || null, rating, skill, now, now]);
+    }
+    if (profile_changes && incomingPlayerId && !new_player) {
+      const changedName = String(profile_changes.full_name || profile_changes.name || '').trim();
+      const changedPosition = profile_changes.position;
+      const changedRating = Number(profile_changes.skill_rating);
+      if (!changedName || !['Defender', 'Midfielder', 'Striker'].includes(changedPosition) ||
+          !Number.isInteger(changedRating) || changedRating < 1 || changedRating > 10) {
+        throw new Error('Edited player profile requires a name, valid position, and skill rating from 1 to 10.');
+      }
+      const skill = changedRating >= 8 ? 'Top' : changedRating >= 5 ? 'Medium' : 'Normal';
+      run('UPDATE players SET full_name = ?, position = ?, secondary_position = ?, skill_rating = ?, skill_level = ?, updated_at = ? WHERE id = ?;',
+        [changedName, changedPosition, profile_changes.secondary_position || null, changedRating, skill, now, incomingPlayerId]);
+    }
+    if (alreadyAssigned) {
+      if (source_team_action === 'fill_vacancy') {
+        run('UPDATE team_assignments SET player_id = ?, is_replacement = 0, original_player_id = NULL, updated_at = ? WHERE weekly_session_id = ? AND player_id = ?;',
+          [source_fill_player_id, now, id, incomingPlayerId]);
+      } else {
+        run('DELETE FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?;', [id, incomingPlayerId]);
+      }
+    }
     // Insert replacement audit record
     run(
-      `INSERT INTO player_replacements (id, weekly_session_id, original_player_id, replacement_player_id, replacement_type, reason, start_date, end_date, status, created_at, updated_at)
+      `INSERT INTO player_replacements (id, weekly_session_id, original_player_id, incomingPlayerId, replacement_type, reason, start_date, end_date, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?);`,
       [
         repId,
         id,
         original_player_id,
-        replacement_player_id,
+        incomingPlayerId,
         type,
         reason,
         now.split('T')[0],
@@ -869,20 +991,31 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       `UPDATE team_assignments
        SET player_id = ?, original_player_id = ?, is_replacement = 1, updated_at = ?
        WHERE weekly_session_id = ? AND player_id = ?;`,
-      [replacement_player_id, original_player_id, now, id, original_player_id]
+      [incomingPlayerId, original_player_id, now, id, original_player_id]
     );
 
     if (type === 'permanent') {
       run('UPDATE players SET active = 0, updated_at = ? WHERE id = ?;', [now, original_player_id]);
-      run('UPDATE players SET active = 1, updated_at = ? WHERE id = ?;', [now, replacement_player_id]);
+      run('UPDATE players SET active = 1, updated_at = ? WHERE id = ?;', [now, incomingPlayerId]);
     }
   });
 
+  });
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || 'Replacement failed; no changes were applied.' });
+    return;
+  }
+
   logAudit('PLAYER_REPLACED', 'PLAYER_REPLACEMENT', repId, {
     original_player_id,
-    replacement_player_id,
+    incomingPlayerId,
     type,
     reason,
+    source_team: alreadyAssigned?.team_name || null,
+    destination_team: existingAssignment.team_name,
+    source_team_action: source_team_action || null,
+    effective_date: effective_date || now.split('T')[0],
+    profile_modified: Boolean(profile_changes),
   });
 
   res.status(201).json({ success: true, replacement_id: repId });
