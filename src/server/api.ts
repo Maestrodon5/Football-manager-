@@ -536,6 +536,8 @@ apiRouter.put('/sessions/:id/attendance', requireCaptainAuth, (req: Request, res
 apiRouter.post('/sessions/:id/generate-teams', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
   const { include_pending } = req.body;
+  const settings = queryOne<any>("SELECT team_count FROM scheduling_settings WHERE id = 'default'");
+  const teamCount: 2 | 3 = Number(settings?.team_count) === 2 ? 2 : 3;
 
   const session = queryOne<any>('SELECT * FROM weekly_sessions WHERE id = ?', [id]);
   if (!session) {
@@ -562,14 +564,14 @@ apiRouter.post('/sessions/:id/generate-teams', requireCaptainAuth, (req: Request
   `;
   const eligiblePlayers = queryAll<any>(playersSql, [id]);
 
-  if (eligiblePlayers.length < 3) {
+  if (eligiblePlayers.length < teamCount) {
     res.status(400).json({
-      error: `Not enough available players to generate 3 teams (Found ${eligiblePlayers.length}, minimum 3 needed).`,
+      error: `Not enough available players to generate ${teamCount} teams (Found ${eligiblePlayers.length}, minimum ${teamCount} needed).`,
     });
     return;
   }
 
-  const generated = generateBalancedTeams(eligiblePlayers, id);
+  const generated = generateBalancedTeams(eligiblePlayers, id, 1, teamCount);
   const now = new Date().toISOString();
 
   transaction(() => {
@@ -1135,6 +1137,7 @@ apiRouter.get('/settings', (req: Request, res: Response) => {
             generation_time, generation_time as match_time,
             attendance_deadline, attendance_deadline as confirmation_deadline_time,
             timezone,
+            team_count,
             automatic_generation_enabled as auto_generation_enabled,
             captain_approval_required as require_captain_approval,
             unconfirmed_player_policy as unconfirmed_handling,
@@ -1158,6 +1161,7 @@ apiRouter.put('/settings', requireCaptainAuth, (req: Request, res: Response) => 
     captain_approval_required,
     unconfirmed_handling,
     unconfirmed_player_policy,
+    team_count,
   } = req.body;
 
   const genTime = generation_time || match_time;
@@ -1176,6 +1180,7 @@ apiRouter.put('/settings', requireCaptainAuth, (req: Request, res: Response) => 
          automatic_generation_enabled = COALESCE(?, automatic_generation_enabled),
          captain_approval_required = COALESCE(?, captain_approval_required),
          unconfirmed_player_policy = COALESCE(?, unconfirmed_player_policy),
+         team_count = COALESCE(?, team_count),
          updated_at = ?
      WHERE id = 'default';`,
     [
@@ -1186,6 +1191,7 @@ apiRouter.put('/settings', requireCaptainAuth, (req: Request, res: Response) => 
       autoGen !== undefined ? (autoGen ? 1 : 0) : null,
       capApproval !== undefined ? (capApproval ? 1 : 0) : null,
       unconfPolicy || null,
+      team_count === 2 || team_count === 3 ? team_count : null,
       now,
     ]
   );
