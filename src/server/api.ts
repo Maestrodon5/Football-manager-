@@ -976,8 +976,8 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     // Insert replacement audit record
     run(
       `INSERT INTO player_replacements
-       (id, weekly_session_id, original_player_id, replacement_player_id, replacement_type, reason, start_date, end_date, status, created_at, updated_at, source_team_id, destination_team_id, effective_date, profile_modified, created_by, resolution_action)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?);`,
+       (id, weekly_session_id, original_player_id, replacement_player_id, replacement_type, reason, start_date, end_date, status, created_at, updated_at, source_team_id, destination_team_id, effective_date, profile_modified, created_by, resolution_action, source_fill_player_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         repId,
         id,
@@ -995,6 +995,7 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
         profile_changes ? 1 : 0,
         (req as any).captain?.id || null,
         source_team_action || null,
+        source_fill_player_id || null,
       ]
     );
 
@@ -1026,7 +1027,7 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     source_team_action: source_team_action || null,
     effective_date: effective_date || now.split('T')[0],
     profile_modified: Boolean(profile_changes),
-  });
+  }, (req as any).captain?.id || 'CAP-001');
 
   res.status(201).json({ success: true, replacement_id: repId });
 });
@@ -1046,13 +1047,28 @@ apiRouter.post('/replacements/:id/reverse', requireCaptainAuth, (req: Request, r
   const now = new Date().toISOString();
 
   transaction(() => {
-    // Restore team assignment
+    // Restore the outgoing player in the destination team first, freeing the incoming player's assignment.
     run(
       `UPDATE team_assignments
        SET player_id = ?, original_player_id = NULL, is_replacement = 0, updated_at = ?
        WHERE weekly_session_id = ? AND player_id = ?;`,
       [replacement.original_player_id, now, replacement.weekly_session_id, replacement.replacement_player_id]
     );
+
+    // Restore a cross-team replacement to its source team, reversing the explicitly chosen vacancy resolution.
+    if (replacement.source_team_id && replacement.resolution_action === 'allow_uneven') {
+      const sourceExists = queryOne('SELECT id FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?', [replacement.weekly_session_id, replacement.replacement_player_id]);
+      if (!sourceExists) {
+        run(`INSERT INTO team_assignments (id, weekly_session_id, player_id, team_name, is_replacement, original_player_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 0, NULL, ?, ?);`,
+          [`TA-REV-${id}`, replacement.weekly_session_id, replacement.replacement_player_id, replacement.source_team_id, now, now]);
+      }
+    } else if (replacement.source_team_id && replacement.resolution_action === 'fill_vacancy' && replacement.source_fill_player_id) {
+      run('DELETE FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?;', [replacement.weekly_session_id, replacement.source_fill_player_id]);
+      run(`INSERT INTO team_assignments (id, weekly_session_id, player_id, team_name, is_replacement, original_player_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 0, NULL, ?, ?);`,
+        [`TA-REV-${id}`, replacement.weekly_session_id, replacement.replacement_player_id, replacement.source_team_id, now, now]);
+    }
 
     // Mark replacement reversed
     run('UPDATE player_replacements SET status = "reversed", updated_at = ? WHERE id = ?;', [now, id]);
