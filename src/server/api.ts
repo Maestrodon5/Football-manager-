@@ -555,6 +555,8 @@ apiRouter.put('/sessions/:id/attendance', requireCaptainAuth, (req: Request, res
 apiRouter.post('/sessions/:id/generate-teams', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
   const { include_pending } = req.body;
+  const requestedPlayersPerTeam = Number(req.body?.players_per_team);
+  const playersPerTeam: 9 | 10 = requestedPlayersPerTeam === 9 ? 9 : 10;
   const settings = queryOne<any>("SELECT team_count FROM scheduling_settings WHERE id = 'default'");
   const teamCount: 2 | 3 = Number(settings?.team_count) === 2 ? 2 : 3;
 
@@ -590,7 +592,7 @@ apiRouter.post('/sessions/:id/generate-teams', requireCaptainAuth, (req: Request
     return;
   }
 
-  const generated = generateBalancedTeams(eligiblePlayers, id, 1, teamCount);
+  const generated = generateBalancedTeams(eligiblePlayers, id, 1, teamCount, playersPerTeam);
   const now = new Date().toISOString();
 
   transaction(() => {
