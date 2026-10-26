@@ -23,8 +23,8 @@ export function seedDatabase(db: SqlJsDatabase) {
   const settingsCount = (settingsRes[0]?.values[0]?.[0] as number) || 0;
   if (settingsCount === 0) {
     db.run(
-      `INSERT INTO scheduling_settings (id, day_of_week, generation_time, attendance_deadline, timezone, automatic_generation_enabled, captain_approval_required, unconfirmed_player_policy, updated_at)
-       VALUES ('default', 'Wednesday', '15:00', '14:30', 'Africa/Addis_Ababa', 1, 1, 'flag_and_exclude', ?);`,
+      `INSERT INTO scheduling_settings (id, day_of_week, generation_time, attendance_deadline, timezone, automatic_generation_enabled, captain_approval_required, unconfirmed_player_policy, team_count, updated_at)
+       VALUES ('default', 'Wednesday', '15:00', '14:30', 'Africa/Addis_Ababa', 1, 1, 'flag_and_exclude', 3, ?);`,
       [now]
     );
   }
