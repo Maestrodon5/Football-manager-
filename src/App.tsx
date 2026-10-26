@@ -70,6 +70,7 @@ export default function App() {
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [settings, setSettings] = useState<ScheduleSettings | null>(null);
+  const [teamCount, setTeamCount] = useState<2 | 3>(3);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [statsData, setStatsData] = useState<{ total_club_matches: number; player_statistics: any[] }>({
     total_club_matches: 0,
@@ -138,6 +139,7 @@ export default function App() {
       // Load settings
       const settingsRes = await api.getSettings();
       setSettings(settingsRes.settings);
+      setTeamCount(Number(settingsRes.settings.team_count) === 2 ? 2 : 3);
 
       // Load stats
       const statsRes = await api.getStatistics();
