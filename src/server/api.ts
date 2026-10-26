@@ -1031,9 +1031,11 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       const newName = String(new_player.full_name || new_player.name).trim();
       const rating = Number(new_player.skill_rating);
       const skill = rating >= 8 ? 'Top' : rating >= 5 ? 'Medium' : 'Normal';
+      const effective = effective_date || now.split('T')[0];
+      const shouldActivate = type === 'permanent' && effective <= now.split('T')[0] ? 1 : 0;
       run(`INSERT INTO players (id, full_name, position, secondary_position, skill_rating, skill_level, active, created_at, updated_at, archived_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL);`,
-        [incomingPlayerId, newName, new_player.position, new_player.secondary_position || null, rating, skill, now, now]);
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+        [incomingPlayerId, newName, new_player.position, new_player.secondary_position || null, rating, skill, shouldActivate, now, now]);
     }
     if (profile_changes && incomingPlayerId && !new_player) {
       const changedName = String(profile_changes.full_name || profile_changes.name || '').trim();
