@@ -71,6 +71,7 @@ export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [settings, setSettings] = useState<ScheduleSettings | null>(null);
   const [teamCount, setTeamCount] = useState<2 | 3>(3);
+  const [playersPerTeam, setPlayersPerTeam] = useState<9 | 10>(10);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [statsData, setStatsData] = useState<{ total_club_matches: number; player_statistics: any[] }>({
     total_club_matches: 0,
@@ -186,6 +187,7 @@ export default function App() {
       setGeneratingTeams(true);
       const res = await api.generateTeams(activeSession.id, {
         reason: 'Manual Captain Lineup Optimization',
+        players_per_team: playersPerTeam,
       });
       setGenerationMeta(res.result.balance_explanation);
       await loadAllData();
@@ -536,6 +538,19 @@ export default function App() {
                       <select value={teamCount} onChange={e => handleTeamCountChange(e.target.value)} disabled={generatingTeams || isLocked} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
                         <option value={2}>2 teams</option>
                         <option value={3}>3 teams</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <span>Players per team</span>
+                      <select
+                        aria-label="Players per team"
+                        value={playersPerTeam}
+                        onChange={(e) => setPlayersPerTeam(Number(e.target.value) === 9 ? 9 : 10)}
+                        disabled={generatingTeams || isLocked}
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-50"
+                      >
+                        <option value={9}>9 players</option>
+                        <option value={10}>10 players</option>
                       </select>
                     </label>
                     <button
