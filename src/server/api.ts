@@ -939,6 +939,16 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     return;
   }
 
+  const sessionRecord = queryOne<any>('SELECT id, status, locked_at, session_date FROM weekly_sessions WHERE id = ?', [id]);
+  if (!sessionRecord) {
+    res.status(404).json({ error: 'Weekly session not found.' });
+    return;
+  }
+  if (sessionRecord.locked_at !== null || sessionRecord.status === 'teams_locked') {
+    res.status(400).json({ error: 'Unlock this session before replacing players.' });
+    return;
+  }
+
   const originalProfile = queryOne<any>('SELECT * FROM players WHERE id = ?', [original_player_id]);
   if (!originalProfile) {
     res.status(404).json({ error: 'Outgoing player profile not found.' });
@@ -956,6 +966,19 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       return;
     }
     incomingPlayerId = `PLY-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  }
+
+  if (!new_player) {
+    const incomingProfile = queryOne<any>('SELECT id, active, archived_at FROM players WHERE id = ?', [incomingPlayerId]);
+    if (!incomingProfile || incomingProfile.active !== 1 || incomingProfile.archived_at) {
+      res.status(400).json({ error: 'The selected replacement is inactive, archived, or no longer registered.' });
+      return;
+    }
+    const incomingAttendance = queryOne<any>('SELECT status FROM attendance_records WHERE weekly_session_id = ? AND player_id = ?', [id, incomingPlayerId]);
+    if (incomingAttendance && ['absent', 'injured'].includes(String(incomingAttendance.status).toLowerCase())) {
+      res.status(400).json({ error: 'The selected replacement is marked absent or injured for this session.' });
+      return;
+    }
   }
 
   const alreadyAssigned = incomingPlayerId
@@ -983,8 +1006,14 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       return;
     }
     const fillAssigned = queryOne('SELECT id FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?', [id, source_fill_player_id]);
+    const fillProfile = queryOne<any>('SELECT id, active, archived_at FROM players WHERE id = ?', [source_fill_player_id]);
+    const fillAttendance = queryOne<any>('SELECT status FROM attendance_records WHERE weekly_session_id = ? AND player_id = ?', [id, source_fill_player_id]);
     if (fillAssigned) {
       res.status(400).json({ error: 'The source-team fill player is already assigned in this session.' });
+      return;
+    }
+    if (!fillProfile || fillProfile.active !== 1 || fillProfile.archived_at || (fillAttendance && ['absent', 'injured'].includes(String(fillAttendance.status).toLowerCase()))) {
+      res.status(400).json({ error: 'The source-team fill player must be active, unarchived, and eligible for this session.' });
       return;
     }
   }
@@ -1076,6 +1105,9 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       const settings = queryOne<any>("SELECT team_count FROM scheduling_settings WHERE id = 'default'");
       const teamCount: 2 | 3 = Number(settings?.team_count) === 2 ? 2 : 3;
       const perTeam = Number(players_per_team) === 9 ? 9 : 10;
+      if (currentAssignments.length > teamCount * perTeam) {
+        throw new Error(`The current lineup has ${currentAssignments.length} players, exceeding capacity ${teamCount * perTeam}. Reduce the lineup before rebalancing.`);
+      }
       const generated = generateBalancedTeams(currentAssignments, id, Date.now(), teamCount, perTeam);
       const priorReplacementMetadata = new Map(currentAssignments.map(p => [p.id, p]));
       run('DELETE FROM team_assignments WHERE weekly_session_id = ?;', [id]);
