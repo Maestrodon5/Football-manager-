@@ -210,7 +210,6 @@ export const migrations: Migration[] = [
       }
     },
   },
-,
   {
     version: 3,
     name: '003_replacement_workflow_and_player_ratings',
