@@ -17,7 +17,6 @@ import {
   ArrowRightLeft,
   Settings as SettingsIcon,
   BarChart3,
-  LogOut,
   ChevronRight,
   RefreshCw,
 } from 'lucide-react';
@@ -41,7 +40,6 @@ import { ReplacementModal } from './components/replacements/ReplacementModal.js'
 import { SquadManagement } from './components/squad/SquadManagement.js';
 import { ParticipationStatsView } from './components/stats/ParticipationStatsView.js';
 import { SettingsAndAudit } from './components/settings/SettingsAndAudit.js';
-import { CaptainLoginModal } from './components/auth/CaptainLoginModal.js';
 
 // Assets
 import heroBannerImg from './assets/images/hero_pitch_tactics_1793001062410.jpg';
@@ -62,7 +60,6 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
   const [isCaptain, setIsCaptain] = useState<boolean>(false);
   const [captainProfile, setCaptainProfile] = useState<any | null>(null);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   // Core Data
   const [loading, setLoading] = useState<boolean>(true);
@@ -164,17 +161,10 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    api.logout();
-    setIsCaptain(false);
-    setCaptainProfile(null);
-    setAuditLogs([]);
-  };
-
   const handleGenerateTeams = async () => {
     if (!activeSession) return;
     if (!isCaptain) {
-      setShowLoginModal(true);
+      alert('Personal captain access is not available. Check that PERSONAL_MODE=true and JWT_SECRET is configured on your private deployment.');
       return;
     }
 
@@ -317,33 +307,13 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Zone 3: 1 Primary Action + Captain Auth status */}
+          {/* Personal single-owner mode: no login screen or sign-out control */}
           <div className="flex items-center gap-3 shrink-0">
             <PWAInstallButton className="hidden sm:inline-flex" />
-
-            {isCaptain ? (
-              <div className="flex items-center gap-2">
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800 text-[11px] font-bold text-emerald-300">
-                  <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Captain Authenticated</span>
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"
-                  title="Captain Sign Out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="py-1.5 px-3.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 hover:border-slate-600 text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Captain Login</span>
-              </button>
-            )}
+            <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${isCaptain ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300' : 'bg-amber-950/60 border-amber-800 text-amber-300'}`}>
+              <Shield className="w-3.5 h-3.5" />
+              <span>{isCaptain ? 'Personal Captain Mode' : 'Captain Access Unavailable'}</span>
+            </span>
           </div>
         </div>
       </header>
@@ -565,7 +535,7 @@ export default function App() {
               isLocked={isLocked}
               onReplacePlayer={(player) => {
                 if (!isCaptain) {
-                  setShowLoginModal(true);
+                  alert('Personal captain access is not available. Check that PERSONAL_MODE=true and JWT_SECRET is configured on your private deployment.');
                   return;
                 }
                 setReplacingPlayer(player);
@@ -741,17 +711,6 @@ export default function App() {
         />
       )}
 
-      {/* CAPTAIN LOGIN MODAL */}
-      {showLoginModal && (
-        <CaptainLoginModal
-          onClose={() => setShowLoginModal(false)}
-          onLoginSuccess={(capt) => {
-            setIsCaptain(true);
-            setCaptainProfile(capt);
-            loadAllData();
-          }}
-        />
-      )}
     </div>
   );
 }
