@@ -753,7 +753,7 @@ function renderTeamCard(
           </div>
 
           <span className="text-xs font-mono font-bold" style={{ color }}>
-            10 Slots
+            {players.length} Slots
           </span>
         </div>
 
