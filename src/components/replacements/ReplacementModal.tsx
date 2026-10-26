@@ -22,6 +22,8 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
   const destinationTeam = originalPlayer.team_id || originalPlayer.team_name || originalPlayer.current_team || 'A';
   const [loading, setLoading] = useState(true);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [lineups, setLineups] = useState<any[]>([]);
+  const [repeatedPairs, setRepeatedPairs] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [source, setSource] = useState<'existing' | 'new'>('existing');
   const [replacementType, setReplacementType] = useState<ReplacementType>('TEMPORARY');
@@ -50,6 +52,8 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
         if (!active) return;
         const list = (res.recommendations || []).map((r: any) => r.player as Candidate);
         setCandidates(list);
+        setLineups(res.team_lineups || []);
+        setRepeatedPairs(res.repeated_teammate_pairs || []);
         if (list.length) {
           setSelectedId(list[0].id);
           setProfileName(list[0].name);
@@ -66,6 +70,40 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
   const selected = candidates.find(p => p.id === selectedId);
   const unassigned = useMemo(() => candidates.filter(p => !p.current_team && p.id !== selectedId), [candidates, selectedId]);
   const sourceTeam = selected?.current_team || null;
+  const teamPreview = useMemo(() => {
+    const teams: Record<string, any[]> = { A: [], B: [], C: [] };
+    for (const p of lineups) {
+      const team = String(p.team_id || 'A');
+      if (teams[team]) teams[team].push({ ...p, rating: Number(p.skill_rating || 5) });
+    }
+    teams[String(destinationTeam)] = (teams[String(destinationTeam)] || []).filter(p => p.player_id !== outgoingId);
+    if (source === 'existing' && selected?.current_team && teams[String(selected.current_team)]) {
+      teams[String(selected.current_team)] = teams[String(selected.current_team)].filter(p => p.player_id !== selected.id);
+    }
+    const incoming = source === 'new'
+      ? { player_id: 'new-preview', name: newName || 'New player', position: newPosition, rating: newRating }
+      : selected ? { player_id: selected.id, name: selected.name, position: selected.position, rating: Number(selected.skill_rating || 5) } : null;
+    if (incoming && teams[String(destinationTeam)]) teams[String(destinationTeam)].push(incoming);
+    if (source === 'existing' && selected?.current_team && sourceTeamAction === 'fill_vacancy' && sourceFillPlayerId) {
+      const fill = candidates.find(p => p.id === sourceFillPlayerId);
+      if (fill && teams[String(selected.current_team)]) teams[String(selected.current_team)].push({
+        player_id: fill.id, name: fill.name, position: fill.position, rating: Number(fill.skill_rating || 5),
+      });
+    }
+    return Object.entries(teams).map(([team, players]) => {
+      const total = players.reduce((sum, p) => sum + Number(p.rating || 0), 0);
+      return {
+        team, players, count: players.length, total,
+        average: players.length ? total / players.length : 0,
+        defenders: players.filter(p => p.position === 'Defender').length,
+        midfielders: players.filter(p => p.position === 'Midfielder').length,
+        forwards: players.filter(p => p.position === 'Striker').length,
+      };
+    }).filter(t => t.players.length > 0);
+  }, [lineups, destinationTeam, outgoingId, source, selected, sourceTeamAction, sourceFillPlayerId, candidates, newName, newPosition, newRating]);
+  const skillTotals = teamPreview.map(t => t.total);
+  const skillGap = skillTotals.length > 1 ? Math.max(...skillTotals) - Math.min(...skillTotals) : 0;
+
   const edited = Boolean(selected && (
     profileName.trim() !== selected.name ||
     profilePosition !== selected.position ||
@@ -230,8 +268,23 @@ export const ReplacementModal: React.FC<ReplacementModalProps> = ({ sessionId, o
             </div>
           </section>
 
+          <section className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">5. Affected-team preview</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {teamPreview.map(team => (
+                <div key={team.team} className={`rounded-xl border p-3 ${String(team.team) === String(destinationTeam) ? 'border-emerald-700 bg-emerald-950/20' : sourceTeam && String(team.team) === String(sourceTeam) ? 'border-amber-700 bg-amber-950/20' : 'border-slate-700 bg-slate-950'}`}>
+                  <div className="flex items-center justify-between"><strong className="text-sm text-white">Team {team.team}</strong><span className="text-xs text-slate-300">{team.count} players</span></div>
+                  <p className="mt-2 text-xs text-slate-300">Skill total <strong>{team.total}</strong> · Average <strong>{team.average.toFixed(1)}</strong></p>
+                  <p className="mt-1 text-[11px] text-slate-400">DEF {team.defenders} · MID {team.midfielders} · FWD {team.forwards}</p>
+                  <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto border-t border-slate-800 pt-2">{team.players.map((player: any) => <li key={player.player_id} className="truncate text-[11px] text-slate-300">{player.name} <span className="text-slate-500">({player.rating}/10)</span></li>)}</ul>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-300">Projected strongest-to-weakest skill-total gap: <strong className="text-white">{skillGap}</strong>. {repeatedPairs.length} historical teammate pair(s) overlap the current division before this proposed change. Rebalance mode runs the existing fairness engine on confirmation.</p>
+          </section>
+
           <section className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">5. Reason and final review</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">6. Reason and final review</h3>
             <div><label className={labelClass}>Reason for replacement *</label><input required value={reason} onChange={e => setReason(e.target.value)} className={inputClass} placeholder="Absence, injury, availability, etc." /></div>
             <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-slate-300">
               <p className="font-bold text-white">Proposed change</p>
