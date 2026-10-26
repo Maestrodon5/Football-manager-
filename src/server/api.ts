@@ -864,9 +864,37 @@ apiRouter.get('/sessions/:id/replacements/recommendations', (req: Request, res: 
 
   scored.sort((a, b) => b.score - a.score);
 
+  const team_lineups = queryAll<any>(
+    `SELECT ta.team_name as team_id, p.id as player_id, p.full_name as name, p.position,
+            p.secondary_position,
+            COALESCE(p.skill_rating, CASE p.skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
+            p.skill_level
+     FROM team_assignments ta JOIN players p ON p.id = ta.player_id
+     WHERE ta.weekly_session_id = ?
+     ORDER BY ta.team_name, p.position, p.full_name`,
+    [id]
+  );
+  const historicalPairs = queryAll<any>(
+    `SELECT a.player_id as player_a, b.player_id as player_b, COUNT(*) as repeats
+     FROM team_assignments a
+     JOIN team_assignments b ON a.weekly_session_id = b.weekly_session_id
+       AND a.team_name = b.team_name AND a.player_id < b.player_id
+     WHERE a.weekly_session_id != ?
+       AND EXISTS (
+         SELECT 1 FROM team_assignments current_a
+         JOIN team_assignments current_b ON current_a.weekly_session_id = current_b.weekly_session_id
+           AND current_a.team_name = current_b.team_name
+         WHERE current_a.weekly_session_id = ? AND current_a.player_id = a.player_id AND current_b.player_id = b.player_id
+       )
+     GROUP BY a.player_id, b.player_id`,
+    [id, id]
+  );
+
   res.json({
     original_player: targetPlayer,
     recommendations: scored,
+    team_lineups,
+    repeated_teammate_pairs: historicalPairs,
   });
 });
 
