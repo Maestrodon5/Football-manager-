@@ -138,8 +138,9 @@ export function checkScheduledTasks() {
         `;
         const eligiblePlayers = queryAll<any>(playersSql, [sessionId]);
 
-        if (eligiblePlayers.length >= 3) {
-          const generated = generateBalancedTeams(eligiblePlayers, sessionId);
+        const teamCount: 2 | 3 = Number(settings.team_count) === 2 ? 2 : 3;
+        if (eligiblePlayers.length >= teamCount) {
+          const generated = generateBalancedTeams(eligiblePlayers, sessionId, 1, teamCount);
           const now = new Date().toISOString();
 
           // Clear previous assignments for this session if any
