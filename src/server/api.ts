@@ -872,7 +872,7 @@ apiRouter.get('/sessions/:id/replacements/recommendations', (req: Request, res: 
 
 apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
-  const { original_player_id, replacement_player_id, replacement_type, reason, end_date, new_player, source_team_action, source_fill_player_id, effective_date, profile_changes } = req.body;
+  const { original_player_id, replacement_player_id, replacement_type, reason, end_date, new_player, source_team_action, source_fill_player_id, effective_date, profile_changes, apply_mode, players_per_team } = req.body;
   let incomingPlayerId = replacement_player_id;
 
   if (!original_player_id || (!incomingPlayerId && !new_player) || !replacement_type || !reason) {
@@ -1011,6 +1011,38 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       run('UPDATE players SET active = 0, updated_at = ? WHERE id = ?;', [now, original_player_id]);
       run('UPDATE players SET active = 1, updated_at = ? WHERE id = ?;', [now, incomingPlayerId]);
     }
+
+    if (apply_mode === 'rebalance') {
+      const currentAssignments = queryAll<any>(
+        `SELECT ta.player_id as id, p.full_name as name, p.position, p.skill_level, 'available' as attendance_status,
+                ta.is_replacement, ta.original_player_id
+         FROM team_assignments ta JOIN players p ON p.id = ta.player_id
+         WHERE ta.weekly_session_id = ?`,
+        [id]
+      );
+      const settings = queryOne<any>("SELECT team_count FROM scheduling_settings WHERE id = 'default'");
+      const teamCount: 2 | 3 = Number(settings?.team_count) === 2 ? 2 : 3;
+      const perTeam = Number(players_per_team) === 9 ? 9 : 10;
+      const generated = generateBalancedTeams(currentAssignments, id, Date.now(), teamCount, perTeam);
+      const priorReplacementMetadata = new Map(currentAssignments.map(p => [p.id, p]));
+      run('DELETE FROM team_assignments WHERE weekly_session_id = ?;', [id]);
+      (['A', 'B', 'C'] as const).forEach(teamName => {
+        for (const player of generated.teams[teamName].players) {
+          const prior = priorReplacementMetadata.get(player.id);
+          run(
+            `INSERT INTO team_assignments (id, weekly_session_id, player_id, team_name, is_replacement, original_player_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [`TA-${id}-R-${player.id}`, id, player.id, teamName, prior?.is_replacement ? 1 : 0, prior?.original_player_id || null, now, now]
+          );
+        }
+      });
+      run(
+        `INSERT INTO team_generation_runs (id, weekly_session_id, algorithm_version, random_seed, generation_summary, created_at)
+         VALUES (?, ?, '2.0.0-rebalance', ?, ?, ?)`,
+        [`TGR-${id}-R-${Date.now()}`, id, generated.balance_explanation.seed,
+          JSON.stringify({ teams: generated.teams, balance: generated.balance_explanation, reason: 'post-replacement rebalance' }), now]
+      );
+    }
   });
   } catch (error: any) {
     res.status(400).json({ error: error?.message || 'Replacement failed; no changes were applied.' });
@@ -1027,6 +1059,7 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     source_team_action: source_team_action || null,
     effective_date: effective_date || now.split('T')[0],
     profile_modified: Boolean(profile_changes),
+    apply_mode: apply_mode === 'rebalance' ? 'replacement_and_rebalance' : 'replacement_only',
   }, (req as any).captain?.id || 'CAP-001');
 
   res.status(201).json({ success: true, replacement_id: repId });
