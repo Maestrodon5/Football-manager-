@@ -39,6 +39,9 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
   const [formIsActive, setFormIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deletingAllPlayers, setDeletingAllPlayers] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [deleteAllConfirmation, setDeleteAllConfirmation] = useState('');
+  const [permanentDeleteMode, setPermanentDeleteMode] = useState(false);
 
   // Filter players
   const filtered = players.filter((p) => {
@@ -99,26 +102,28 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
 
   const handleDeleteAllPlayers = async () => {
     if (!isCaptain || deletingAllPlayers) return;
-    const confirmed = window.confirm(
-      `Permanently delete ALL ${players.length} player profiles? This also removes their attendance, team assignments, replacement records, and player statistics. This cannot be undone.`
-    );
-    if (!confirmed) return;
-    const confirmationText = window.prompt('Type DELETE ALL PLAYERS to confirm this permanent action:');
-    if (confirmationText !== 'DELETE ALL PLAYERS') {
-      if (confirmationText !== null) alert('Confirmation text did not match. No players were deleted.');
-      return;
-    }
+    const requiredText = permanentDeleteMode
+      ? 'PERMANENTLY DELETE ALL PLAYER DATA'
+      : 'DELETE ALL PLAYERS';
+    if (deleteAllConfirmation !== requiredText) return;
 
     try {
       setDeletingAllPlayers(true);
-      const result = await api.deleteAllPlayers();
-      alert(result.message || `Deleted ${result.deletedCount} player profiles.`);
+      const result = permanentDeleteMode
+        ? await api.permanentlyDeleteAllPlayers(deleteAllConfirmation)
+        : await api.deleteAllPlayers();
+      alert(result.message || (permanentDeleteMode
+        ? `Permanently deleted ${result.deletedCount} player profiles.`
+        : `Archived ${result.archivedCount} player profiles.`));
+      setShowDeleteAllModal(false);
+      setDeleteAllConfirmation('');
+      setPermanentDeleteMode(false);
       setSearch('');
       setPositionFilter('ALL');
       setSkillFilter('ALL');
       await onPlayersUpdated();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete all players.');
+      alert(err.message || 'Player operation failed. No success was reported.');
     } finally {
       setDeletingAllPlayers(false);
     }
@@ -184,20 +189,70 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>Add Player</span>
               </button>
-              <button
-                type="button"
-                onClick={handleDeleteAllPlayers}
-                disabled={deletingAllPlayers || players.length === 0}
-                title="Permanently delete every player and player-linked records"
-                className="py-1.5 px-4 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 font-bold text-xs shadow-md inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{deletingAllPlayers ? 'Deleting Players…' : 'Delete All Players'}</span>
-              </button>
             </>
           )}
         </div>
       </div>
+
+      {isCaptain && (
+        <section className="rounded-2xl border border-rose-900/70 bg-rose-950/20 p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-rose-800 bg-rose-950 p-2 text-rose-300"><AlertTriangle className="h-5 w-5" /></div>
+            <div className="flex-1">
+              <h3 className="text-sm font-black uppercase tracking-wide text-rose-200">Danger Zone</h3>
+              <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                {players.length} active/visible player profile(s). The recommended action archives players and preserves historical sessions, attendance and statistics.
+                Permanent deletion is separate and may remove player-linked history.
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={() => { setPermanentDeleteMode(false); setDeleteAllConfirmation(''); setShowDeleteAllModal(true); }}
+            disabled={deletingAllPlayers || players.length === 0}
+            className="rounded-xl border border-rose-700 bg-rose-900/60 px-4 py-2 text-xs font-bold text-rose-100 hover:bg-rose-900 disabled:opacity-40">
+            <Trash2 className="mr-2 inline h-4 w-4" /> Delete All Players (Archive)
+          </button>
+        </section>
+      )}
+
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-all-title" className="w-full max-w-lg space-y-4 rounded-2xl border border-rose-800 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-7 w-7 text-rose-400" />
+              <div><h3 id="delete-all-title" className="text-base font-black text-white">{permanentDeleteMode ? 'Permanently Delete All Player Data?' : 'Archive All Players?'}</h3>
+              <p className="text-xs text-slate-400">{players.length} currently visible player profile(s) may be affected.</p></div>
+            </div>
+            <p className="text-sm leading-relaxed text-slate-300">
+              {permanentDeleteMode
+                ? 'This permanently deletes player profiles and player-linked attendance, assignments, replacements and participation rows. Session and audit history is retained where database constraints allow. This cannot be undone.'
+                : 'This removes all players from the active roster by archiving them. Their profiles and historical records remain available; they will no longer be selected for future team generation.'}
+            </p>
+            <label className="block space-y-2 text-xs font-semibold text-slate-200">
+              Type <span className="font-mono text-rose-300">{permanentDeleteMode ? 'PERMANENTLY DELETE ALL PLAYER DATA' : 'DELETE ALL PLAYERS'}</span> to enable confirmation.
+              <input autoComplete="off" value={deleteAllConfirmation} onChange={e => setDeleteAllConfirmation(e.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-rose-500"
+                placeholder={permanentDeleteMode ? 'PERMANENTLY DELETE ALL PLAYER DATA' : 'DELETE ALL PLAYERS'} />
+            </label>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-4">
+              <button type="button" onClick={() => { setShowDeleteAllModal(false); setDeleteAllConfirmation(''); setPermanentDeleteMode(false); }}
+                className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-bold text-slate-200">Cancel</button>
+              <div className="flex flex-wrap gap-2">
+                {!permanentDeleteMode ? (
+                  <button type="button" onClick={() => { setPermanentDeleteMode(true); setDeleteAllConfirmation(''); }}
+                    className="rounded-xl border border-rose-800 px-3 py-2 text-xs font-bold text-rose-300">Show permanent-delete option</button>
+                ) : (
+                  <button type="button" onClick={() => { setPermanentDeleteMode(false); setDeleteAllConfirmation(''); }}
+                    className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300">Back to archive</button>
+                )}
+                <button type="button" onClick={handleDeleteAllPlayers} disabled={deletingAllPlayers || deleteAllConfirmation !== (permanentDeleteMode ? 'PERMANENTLY DELETE ALL PLAYER DATA' : 'DELETE ALL PLAYERS')}
+                  className="rounded-xl bg-rose-700 px-4 py-2 text-xs font-black text-white hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-40">
+                  {deletingAllPlayers ? 'Processing…' : permanentDeleteMode ? 'Permanently Delete All Player Data' : 'Confirm Archive All Players'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Players Directory Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
