@@ -163,6 +163,18 @@ export default function App() {
     }
   };
 
+  const handleTeamCountChange = async (value: string) => {
+    const next: 2 | 3 = value === '2' ? 2 : 3;
+    setTeamCount(next);
+    try {
+      await api.updateSettings({ team_count: next });
+      setSettings(prev => prev ? { ...prev, team_count: next } : prev);
+    } catch (err: any) {
+      alert(err.message || 'Could not save team count.');
+      setTeamCount(Number(settings?.team_count) === 2 ? 2 : 3);
+    }
+  };
+
   const handleGenerateTeams = async () => {
     if (!activeSession) return;
     if (!isCaptain) {
