@@ -20,6 +20,8 @@ export interface Player {
   id: string;
   name: string;
   position: Position;
+  secondary_position?: Position | null;
+  skill_rating?: number;
   skill_level: SkillLevel;
   is_active: boolean;
   is_archived: boolean;
