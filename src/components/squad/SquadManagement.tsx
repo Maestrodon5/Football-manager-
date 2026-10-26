@@ -42,6 +42,7 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [deleteAllConfirmation, setDeleteAllConfirmation] = useState('');
   const [permanentDeleteMode, setPermanentDeleteMode] = useState(false);
+  const [totalPlayerCount, setTotalPlayerCount] = useState(players.length);
 
   // Filter players
   const filtered = players.filter((p) => {
@@ -207,8 +208,14 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
               </p>
             </div>
           </div>
-          <button type="button" onClick={() => { setPermanentDeleteMode(false); setDeleteAllConfirmation(''); setShowDeleteAllModal(true); }}
-            disabled={deletingAllPlayers || players.length === 0}
+          <button type="button" onClick={() => {
+              setPermanentDeleteMode(false);
+              setDeleteAllConfirmation('');
+              setTotalPlayerCount(players.length);
+              setShowDeleteAllModal(true);
+              api.getPlayers({ includeArchived: true }).then(result => setTotalPlayerCount(result.players.length)).catch(() => setTotalPlayerCount(players.length));
+            }}
+            disabled={deletingAllPlayers}
             className="rounded-xl border border-rose-700 bg-rose-900/60 px-4 py-2 text-xs font-bold text-rose-100 hover:bg-rose-900 disabled:opacity-40">
             <Trash2 className="mr-2 inline h-4 w-4" /> Delete All Players (Archive)
           </button>
@@ -221,7 +228,7 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-7 w-7 text-rose-400" />
               <div><h3 id="delete-all-title" className="text-base font-black text-white">{permanentDeleteMode ? 'Permanently Delete All Player Data?' : 'Archive All Players?'}</h3>
-              <p className="text-xs text-slate-400">{players.length} currently visible player profile(s) may be affected.</p></div>
+              <p className="text-xs text-slate-400">{totalPlayerCount} total player profile(s), including archived records, may be affected.</p></div>
             </div>
             <p className="text-sm leading-relaxed text-slate-300">
               {permanentDeleteMode
