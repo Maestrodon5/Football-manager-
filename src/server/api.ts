@@ -233,9 +233,9 @@ apiRouter.post('/players', requireCaptainAuth, (req: Request, res: Response) => 
   logAudit('PLAYER_CREATED', 'PLAYER', id, { full_name: playerName, position, skill_level });
 
   const created = queryOne<any>(
-    'SELECT id, full_name, full_name as name, position, secondary_position,
+    `SELECT id, full_name, full_name as name, position, secondary_position,
             COALESCE(skill_rating, CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
-            skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?',
+            skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?`,
     [id]
   );
   res.status(201).json({ player: created });
@@ -304,9 +304,9 @@ apiRouter.put('/players/:id', requireCaptainAuth, (req: Request, res: Response) 
   logAudit('PLAYER_UPDATED', 'PLAYER', id, { previous: existing, updated: req.body });
 
   const updated = queryOne<any>(
-    'SELECT id, full_name, full_name as name, position, secondary_position,
+    `SELECT id, full_name, full_name as name, position, secondary_position,
             COALESCE(skill_rating, CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
-            skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?',
+            skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?`,
     [id]
   );
   res.json({ player: updated });
