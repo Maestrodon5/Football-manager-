@@ -806,20 +806,23 @@ apiRouter.get('/sessions/:id/replacements/recommendations', (req: Request, res: 
     return;
   }
 
-  // Unassigned eligible players
+  const outgoingAssignment = queryOne<any>('SELECT team_name FROM team_assignments WHERE weekly_session_id = ? AND player_id = ?', [id, playerId]);
   const candidateSql = `
-    SELECT p.id, p.full_name as name, p.position, p.skill_level,
+    SELECT p.id, p.full_name as name, p.position, p.secondary_position,
+           COALESCE(p.skill_rating, CASE p.skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
+           p.skill_level, ta.team_name as current_team,
            (SELECT COUNT(*) FROM player_participation pp WHERE pp.player_id = p.id) as total_matches,
            COALESCE(ar.status, 'pending') as attendance_status
     FROM players p
     LEFT JOIN attendance_records ar ON p.id = ar.player_id AND ar.weekly_session_id = ?
+    LEFT JOIN team_assignments ta ON ta.player_id = p.id AND ta.weekly_session_id = ?
     WHERE p.active = 1
       AND p.archived_at IS NULL
       AND p.id != ?
-      AND p.id NOT IN (SELECT player_id FROM team_assignments WHERE weekly_session_id = ?)
+      AND (ta.player_id IS NULL OR ta.team_name != ?)
       AND (ar.status IS NULL OR ar.status NOT IN ('absent', 'injured'))
   `;
-  const candidates = queryAll<any>(candidateSql, [id, id, playerId, id, playerId]);
+  const candidates = queryAll<any>(candidateSql, [id, id, playerId, outgoingAssignment?.team_name || '']);
 
   const scored = candidates.map((c) => {
     let score = 100;
@@ -868,7 +871,7 @@ apiRouter.get('/sessions/:id/replacements/recommendations', (req: Request, res: 
 apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
   const { original_player_id, replacement_player_id, replacement_type, reason, end_date, new_player, source_team_action, source_fill_player_id, effective_date, profile_changes } = req.body;
-  let incomingPlayerId = incomingPlayerId;
+  let incomingPlayerId = replacement_player_id;
 
   if (!original_player_id || (!incomingPlayerId && !new_player) || !replacement_type || !reason) {
     res.status(400).json({ error: 'All replacement parameters are required.' });
