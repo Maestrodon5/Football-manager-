@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#022c22" />
+      <stop offset="50%" stop-color="#064e3b" />
+      <stop offset="100%" stop-color="#021f18" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="50%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+  </defs>
+  <!-- Background Shield -->
+  <path d="M256 32 L432 96 C432 304 256 464 256 480 C256 464 80 304 80 96 Z" fill="url(#bg)" stroke="url(#gold)" stroke-width="14" stroke-linejoin="round" />
+  <!-- Pitch Line Arc -->
+  <path d="M120 220 Q256 280 392 220" fill="none" stroke="#10b981" stroke-width="6" opacity="0.4" />
+  <circle cx="256" cy="240" r="48" fill="none" stroke="#10b981" stroke-width="6" opacity="0.4" />
+  <!-- Soccer Ball / Crest Graphic -->
+  <circle cx="256" cy="240" r="76" fill="#0f172a" stroke="url(#gold)" stroke-width="8" />
+  <!-- Pentagons inside soccer ball -->
+  <polygon points="256,204 286,226 274,260 238,260 226,226" fill="url(#gold)" />
+  <path d="M256 204 L256 164 M286 226 L324 214 M274 260 L298 296 M238 260 L214 296 M226 226 L188 214" stroke="url(#gold)" stroke-width="6" stroke-linecap="round" />
+  <!-- Club Name Banner -->
+  <path d="M128 360 L384 360 L352 408 L160 408 Z" fill="url(#gold)" />
+  <text x="256" y="394" text-anchor="middle" font-family="sans-serif" font-weight="900" font-size="28" fill="#022c22" letter-spacing="4">PITCHMASTER</text>
+  <!-- Stars -->
+  <polygon points="256,92 262,106 276,106 264,116 268,130 256,120 244,130 248,116 236,106 250,106" fill="url(#gold)" />
+</svg>

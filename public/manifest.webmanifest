@@ -1,0 +1,17 @@
+{
+  "name": "PitchMaster FC — Professional Football Club Manager",
+  "short_name": "PitchMaster FC",
+  "description": "Football Club Manager with automated weekly scheduling, team balancing algorithm, attendance tracking, and match rotation timers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#064e3b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

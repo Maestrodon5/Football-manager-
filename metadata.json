@@ -1,0 +1,6 @@
+{
+  "name": "PitchMaster FC",
+  "description": "Full-stack Football Club Manager with automated weekly scheduling, team balancing algorithm, attendance tracking, match rotation timers, and team sheet sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
