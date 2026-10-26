@@ -199,6 +199,18 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: '002_team_count',
+    up: (db: SqlJsDatabase) => {
+      const columns = db.exec("PRAGMA table_info(scheduling_settings)");
+      const names = new Set((columns[0]?.values || []).map(row => String(row[1])));
+      if (!names.has('team_count')) {
+        db.run("ALTER TABLE scheduling_settings ADD COLUMN team_count INTEGER NOT NULL DEFAULT 3 CHECK(team_count IN (2, 3));");
+      }
+    },
+  },
+
 ];
 
 export function runMigrations(db: SqlJsDatabase) {
