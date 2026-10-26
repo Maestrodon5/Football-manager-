@@ -233,6 +233,7 @@ export const migrations: Migration[] = [
         ['profile_modified', 'INTEGER NOT NULL DEFAULT 0'],
         ['created_by', 'TEXT'],
         ['resolution_action', 'TEXT'],
+        ['source_fill_player_id', 'TEXT'],
       ];
       for (const [name, definition] of additions) {
         if (!replacementColumns.has(name)) {
