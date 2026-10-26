@@ -510,6 +510,13 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-2">
                 {isCaptain && (
                   <>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                      Teams
+                      <select value={teamCount} onChange={e => handleTeamCountChange(e.target.value)} disabled={generatingTeams || isLocked} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+                        <option value={2}>2 teams</option>
+                        <option value={3}>3 teams</option>
+                      </select>
+                    </label>
                     <button
                       onClick={handleGenerateTeams}
                       disabled={generatingTeams || isLocked}
