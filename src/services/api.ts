@@ -139,6 +139,12 @@ export const api = {
     });
   },
 
+  async deleteAllPlayers(): Promise<{ success: boolean; deletedCount: number; message: string }> {
+    return apiFetch<{ success: boolean; deletedCount: number; message: string }>('/api/players', {
+      method: 'DELETE',
+    });
+  },
+
   // Weekly Sessions & Attendance
   async getSessions(): Promise<{ sessions: WeeklySession[] }> {
     return apiFetch<{ sessions: WeeklySession[] }>('/api/sessions');
