@@ -589,6 +589,7 @@ export default function App() {
             {/* Tactical Pitch View Component */}
             <TacticalPitchView
               assignments={assignments}
+              isCaptain={isCaptain}
               isLocked={isLocked}
               onReplacePlayer={(player) => {
                 if (!isCaptain) {
@@ -860,10 +861,11 @@ function renderTeamCard(
                 {isCaptain && !isLocked && (
                   <button
                     onClick={() => onReplace(p)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                    className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-200 transition hover:bg-slate-700"
                     title="Replace player"
                   >
-                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                    <span>Replace</span>
                   </button>
                 )}
               </div>
