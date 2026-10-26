@@ -18,34 +18,19 @@ export const ShareLineupModal: React.FC<ShareLineupModalProps> = ({ session, ass
   const teamC = assignments.filter((a) => a.team_id === 'C');
 
   const formatTeamText = (name: string, members: any[]) => {
-    let out = `${name}\n`;
-    if (members.length === 0) {
-      out += '  (No players assigned)\n';
-    } else {
-      members.forEach((m, idx) => {
-        let repTag = '';
-        if (m.is_temporary_replacement) {
-          repTag = ` [TEMP REPLACEMENT for ${m.original_player_name || 'original player'}]`;
-        }
-        out += `${idx + 1}. ${m.name} — ${m.position} — ${m.skill_level}${repTag}\n`;
-      });
-    }
-    return out;
+    const names = members.map((member) => member.name).filter(Boolean);
+    return `${name}\n${names.length ? names.join('\n') : '(No players assigned)'}`;
   };
 
-  const shareText = `⚽ PITCHMASTER FC — WEEKLY TEAMS ⚽
-Date: ${session.session_date}
-Time: ${session.scheduled_time || '15:00'} (Africa/Addis_Ababa)
-Venue: Pitch 1 — Stadium Grounds
+  // Keep shared text simple: team headings and player names only.
+  const shareText = `TEAM A
+${teamA.map((member) => member.name).filter(Boolean).join('\n') || '(No players assigned)'}
 
-🟢 TEAM A (EMERALD)
-${formatTeamText('', teamA)}
-🔵 TEAM B (COBALT)
-${formatTeamText('', teamB)}
-🟡 TEAM C (GOLD)
-${formatTeamText('', teamC)}
-📋 Format: 15-Minute Winner-Stays Rotation
-⚠️ Please arrive 15 minutes before kickoff for warmup.`;
+TEAM B
+${teamB.map((member) => member.name).filter(Boolean).join('\n') || '(No players assigned)'}${teamC.length ? `
+
+TEAM C
+${teamC.map((member) => member.name).filter(Boolean).join('\n') || '(No players assigned)'}` : ''}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shareText);
