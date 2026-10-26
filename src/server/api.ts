@@ -630,6 +630,31 @@ apiRouter.post('/sessions/:id/generate-teams', requireCaptainAuth, (req: Request
     return;
   }
 
+  // Apply permanent roster changes whose effective date has arrived before generating a future session.
+  const dueReplacements = queryAll<any>(
+    `SELECT pr.id, pr.original_player_id, pr.replacement_player_id
+     FROM player_replacements pr
+     JOIN players outgoing ON outgoing.id = pr.original_player_id
+     WHERE pr.replacement_type = 'permanent'
+       AND pr.status = 'active'
+       AND COALESCE(pr.effective_date, pr.start_date) <= ?
+       AND outgoing.active = 1`,
+    [session.session_date]
+  );
+  if (dueReplacements.length) {
+    transaction(() => {
+      for (const replacement of dueReplacements) {
+        run('UPDATE players SET active = 0, updated_at = ? WHERE id = ?;', [new Date().toISOString(), replacement.original_player_id]);
+        run('UPDATE players SET active = 1, updated_at = ? WHERE id = ?;', [new Date().toISOString(), replacement.replacement_player_id]);
+        logAudit('SCHEDULED_PERMANENT_REPLACEMENT_APPLIED', 'PLAYER_REPLACEMENT', replacement.id, {
+          effective_date: session.session_date,
+          original_player_id: replacement.original_player_id,
+          replacement_player_id: replacement.replacement_player_id,
+        });
+      }
+    });
+  }
+
   const allowedStatuses = ["'available'"];
   if (include_pending) allowedStatuses.push("'pending'");
 
@@ -1035,7 +1060,7 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       [incomingPlayerId, original_player_id, now, id, original_player_id]
     );
 
-    if (type === 'permanent') {
+    if (type === 'permanent' && (effective_date || now.split('T')[0]) <= now.split('T')[0]) {
       run('UPDATE players SET active = 0, updated_at = ? WHERE id = ?;', [now, original_player_id]);
       run('UPDATE players SET active = 1, updated_at = ? WHERE id = ?;', [now, incomingPlayerId]);
     }
