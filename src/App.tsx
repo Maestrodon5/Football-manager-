@@ -620,14 +620,19 @@ export default function App() {
         )}
 
         {/* MATCH ROTATION & TIMER */}
-        {currentTab === 'rotation' && (
+        {currentTab === 'rotation' && (teamCount === 3 ? (
           <MatchRotationLive
             sessionId={activeSession?.id || ''}
             isCaptain={isCaptain}
             onMatchUpdated={loadAllData}
             matches={matches}
           />
-        )}
+        ) : (
+          <div className="rounded-2xl border border-amber-700/60 bg-amber-950/30 p-6 text-amber-100">
+            <h2 className="text-lg font-bold">Three-team rotation is turned off</h2>
+            <p className="mt-2 text-sm text-amber-200">Winner-stays rotation requires three teams. Switch back to 3 teams on the Pitch tab to use the match timer.</p>
+          </div>
+        ))}
 
         {/* SQUAD MANAGEMENT (PLAYERS DIRECTORY) */}
         {currentTab === 'squad' && (
