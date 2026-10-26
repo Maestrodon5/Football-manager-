@@ -109,12 +109,13 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
 
     try {
       setDeletingAllPlayers(true);
-      const result = permanentDeleteMode
-        ? await api.permanentlyDeleteAllPlayers(deleteAllConfirmation)
-        : await api.deleteAllPlayers();
-      alert(result.message || (permanentDeleteMode
-        ? `Permanently deleted ${result.deletedCount} player profiles.`
-        : `Archived ${result.archivedCount} player profiles.`));
+      if (permanentDeleteMode) {
+        const result = await api.permanentlyDeleteAllPlayers(deleteAllConfirmation);
+        alert(result.message || `Permanently deleted ${result.deletedCount} player profiles.`);
+      } else {
+        const result = await api.deleteAllPlayers();
+        alert(result.message || `Archived ${result.archivedCount} player profiles.`);
+      }
       setShowDeleteAllModal(false);
       setDeleteAllConfirmation('');
       setPermanentDeleteMode(false);
