@@ -324,10 +324,31 @@ export default function App() {
           {/* Personal single-owner mode: no login screen or sign-out control */}
           <div className="flex items-center gap-3 shrink-0">
             <PWAInstallButton className="hidden sm:inline-flex" />
-            <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${isCaptain ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300' : 'bg-amber-950/60 border-amber-800 text-amber-300'}`}>
-              <Shield className="w-3.5 h-3.5" />
-              <span>{isCaptain ? 'Personal Captain Mode' : 'Captain Access Unavailable'}</span>
-            </span>
+            {isCaptain ? (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold bg-emerald-950/80 border-emerald-800 text-emerald-300">
+                <Shield className="w-3.5 h-3.5" />
+                <span>Captain Mode Active</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const session = await api.autoLogin();
+                    setIsCaptain(true);
+                    setCaptainProfile(session.captain);
+                    await loadAllData();
+                    alert('Captain mode activated.');
+                  } catch (error: any) {
+                    alert(error?.message || 'Captain access is not configured. Enable it only on a private, protected deployment.');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-bold bg-amber-950/60 border-amber-800 text-amber-200 hover:bg-amber-900/70"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Activate Captain Role</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
