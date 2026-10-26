@@ -973,7 +973,7 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     }
     // Insert replacement audit record
     run(
-      `INSERT INTO player_replacements (id, weekly_session_id, original_player_id, incomingPlayerId, replacement_type, reason, start_date, end_date, status, created_at, updated_at)
+      `INSERT INTO player_replacements (id, weekly_session_id, original_player_id, replacement_player_id, replacement_type, reason, start_date, end_date, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?);`,
       [
         repId,
@@ -1002,8 +1002,6 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
       run('UPDATE players SET active = 1, updated_at = ? WHERE id = ?;', [now, incomingPlayerId]);
     }
   });
-
-  });
   } catch (error: any) {
     res.status(400).json({ error: error?.message || 'Replacement failed; no changes were applied.' });
     return;
@@ -1011,7 +1009,7 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
 
   logAudit('PLAYER_REPLACED', 'PLAYER_REPLACEMENT', repId, {
     original_player_id,
-    incomingPlayerId,
+    replacement_player_id: incomingPlayerId,
     type,
     reason,
     source_team: alreadyAssigned?.team_name || null,
