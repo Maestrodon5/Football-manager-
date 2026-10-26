@@ -503,7 +503,7 @@ export default function App() {
                   )}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Session: {activeSession?.session_date || 'Wednesday'} · 30 Players Distributed Across 3 Teams
+                  Session: {activeSession?.session_date || 'Wednesday'} · {players.length} registered players · {teamCount} teams
                 </p>
               </div>
 
