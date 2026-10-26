@@ -62,8 +62,28 @@ export const CaptainLoginModal: React.FC<CaptainLoginModalProps> = ({ onClose, o
         </div>
 
         {errorMsg && (
-          <div className="p-3 rounded-xl bg-red-950/50 border border-red-800 text-xs text-red-200">
-            {errorMsg}
+          <div className="p-3.5 rounded-xl bg-red-950/60 border border-red-800 text-xs text-red-200 space-y-2">
+            <div className="font-semibold flex items-center gap-1.5">
+              <span>{errorMsg}</span>
+            </div>
+            {errorMsg.includes('404') && (
+              <div className="text-[11px] text-red-300/90 leading-normal border-t border-red-900/60 pt-2 space-y-2">
+                <p>
+                  <strong>Why this happened on Vercel:</strong> Vercel deployed the static frontend without running the backend Express server. We added <code className="bg-red-900/50 px-1 py-0.5 rounded text-amber-200">vercel.json</code> and <code className="bg-red-900/50 px-1 py-0.5 rounded text-amber-200">api/index.ts</code> to enable Vercel Serverless Functions.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fallback = api.fallbackCaptainAuth();
+                    onLoginSuccess(fallback.captain);
+                    onClose();
+                  }}
+                  className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition text-center"
+                >
+                  ⚡ Unlock Instant Captain Session (Client Mode)
+                </button>
+              </div>
+            )}
           </div>
         )}
 

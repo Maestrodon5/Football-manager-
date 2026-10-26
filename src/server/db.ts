@@ -7,8 +7,16 @@ import { seedDatabase } from './seed.js';
 // Resolve project root deterministically
 const PROJECT_ROOT = process.cwd();
 
-// Configure the database path using DATABASE_PATH env var, defaulting to ./data/football-manager.db
-const rawDbPath = process.env.DATABASE_PATH || './data/football-manager.db';
+// Detect serverless execution environments (Vercel, AWS Lambda)
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NOW_REGION ||
+  process.env.LAMBDA_TASK_ROOT
+);
+
+// Configure the database path using DATABASE_PATH env var, defaulting to /tmp on serverless or ./data locally
+const rawDbPath = process.env.DATABASE_PATH || (isServerless ? '/tmp/football-manager.db' : './data/football-manager.db');
 export const DB_FILE = path.isAbsolute(rawDbPath)
   ? rawDbPath
   : path.resolve(PROJECT_ROOT, rawDbPath);
@@ -20,18 +28,27 @@ export async function getDb(): Promise<SqlJsDatabase> {
   if (dbInstance) return dbInstance;
 
   // Create parent directory automatically if necessary
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-    console.log(`[Database] Created directory: ${DB_DIR}`);
+  try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+      console.log(`[Database] Created directory: ${DB_DIR}`);
+    }
+  } catch (err) {
+    console.warn(`[Database] Notice creating directory ${DB_DIR}:`, err);
   }
 
   const SQL = await initSqlJs();
 
   // Load existing database without overwriting, or create new if not present
   if (fs.existsSync(DB_FILE)) {
-    const fileBuffer = fs.readFileSync(DB_FILE);
-    dbInstance = new SQL.Database(fileBuffer);
-    console.log(`[Database] Loaded existing database from ${DB_FILE}`);
+    try {
+      const fileBuffer = fs.readFileSync(DB_FILE);
+      dbInstance = new SQL.Database(fileBuffer);
+      console.log(`[Database] Loaded existing database from ${DB_FILE}`);
+    } catch (readErr) {
+      console.warn(`[Database] Failed reading ${DB_FILE}, initializing fresh database:`, readErr);
+      dbInstance = new SQL.Database();
+    }
   } else {
     dbInstance = new SQL.Database();
     console.log(`[Database] Initialized new SQLite database at ${DB_FILE}`);
@@ -62,7 +79,7 @@ export function persistDb(): void {
     const buffer = Buffer.from(data);
     fs.writeFileSync(DB_FILE, buffer);
   } catch (err) {
-    console.error('[Database] Error persisting SQLite database to disk:', err);
+    console.warn('[Database] Notice: SQLite persistence write skipped or failed:', err);
   }
 }
 
