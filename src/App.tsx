@@ -570,7 +570,7 @@ export default function App() {
               {/* Team B */}
               {renderTeamCard('B', 'Team B (Cobalt)', '#38bdf8', teamB, isCaptain, isLocked, setReplacingPlayer)}
               {/* Team C */}
-              {renderTeamCard('C', 'Team C (Gold)', '#fbbf24', teamC, isCaptain, isLocked, setReplacingPlayer)}
+              {teamCount === 3 && renderTeamCard('C', 'Team C (Gold)', '#fbbf24', teamC, isCaptain, isLocked, setReplacingPlayer)}
             </div>
 
             {/* Algorithm Balance Report */}
