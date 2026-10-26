@@ -38,6 +38,7 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
   const [formSkill, setFormSkill] = useState<SkillLevel>('Medium');
   const [formIsActive, setFormIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingAllPlayers, setDeletingAllPlayers] = useState(false);
 
   // Filter players
   const filtered = players.filter((p) => {
@@ -96,6 +97,33 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
     }
   };
 
+  const handleDeleteAllPlayers = async () => {
+    if (!isCaptain || deletingAllPlayers) return;
+    const confirmed = window.confirm(
+      `Permanently delete ALL ${players.length} player profiles? This also removes their attendance, team assignments, replacement records, and player statistics. This cannot be undone.`
+    );
+    if (!confirmed) return;
+    const confirmationText = window.prompt('Type DELETE ALL PLAYERS to confirm this permanent action:');
+    if (confirmationText !== 'DELETE ALL PLAYERS') {
+      if (confirmationText !== null) alert('Confirmation text did not match. No players were deleted.');
+      return;
+    }
+
+    try {
+      setDeletingAllPlayers(true);
+      const result = await api.deleteAllPlayers();
+      alert(result.message || `Deleted ${result.deletedCount} player profiles.`);
+      setSearch('');
+      setPositionFilter('ALL');
+      setSkillFilter('ALL');
+      await onPlayersUpdated();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete all players.');
+    } finally {
+      setDeletingAllPlayers(false);
+    }
+  };
+
   const handleConfirmArchive = async (permanent: boolean) => {
     if (!deleteConfirmPlayer) return;
     try {
@@ -148,13 +176,25 @@ export const SquadManagement: React.FC<SquadManagementProps> = ({
           </select>
 
           {isCaptain && (
-            <button
-              onClick={handleOpenAdd}
-              className="py-1.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Add Player</span>
-            </button>
+            <>
+              <button
+                onClick={handleOpenAdd}
+                className="py-1.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Add Player</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAllPlayers}
+                disabled={deletingAllPlayers || players.length === 0}
+                title="Permanently delete every player and player-linked records"
+                className="py-1.5 px-4 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 font-bold text-xs shadow-md inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deletingAllPlayers ? 'Deleting Players…' : 'Delete All Players'}</span>
+              </button>
+            </>
           )}
         </div>
       </div>
