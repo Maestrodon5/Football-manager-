@@ -304,7 +304,9 @@ apiRouter.put('/players/:id', requireCaptainAuth, (req: Request, res: Response) 
   logAudit('PLAYER_UPDATED', 'PLAYER', id, { previous: existing, updated: req.body });
 
   const updated = queryOne<any>(
-    'SELECT id, full_name, full_name as name, position, skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?',
+    'SELECT id, full_name, full_name as name, position, secondary_position,
+            COALESCE(skill_rating, CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END) as skill_rating,
+            skill_level, active as is_active, created_at, updated_at FROM players WHERE id = ?',
     [id]
   );
   res.json({ player: updated });
@@ -973,8 +975,9 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
     }
     // Insert replacement audit record
     run(
-      `INSERT INTO player_replacements (id, weekly_session_id, original_player_id, replacement_player_id, replacement_type, reason, start_date, end_date, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?);`,
+      `INSERT INTO player_replacements
+       (id, weekly_session_id, original_player_id, replacement_player_id, replacement_type, reason, start_date, end_date, status, created_at, updated_at, source_team_id, destination_team_id, effective_date, profile_modified, created_by, resolution_action)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         repId,
         id,
@@ -982,10 +985,16 @@ apiRouter.post('/sessions/:id/replacements', requireCaptainAuth, (req: Request, 
         incomingPlayerId,
         type,
         reason,
-        now.split('T')[0],
+        effective_date || now.split('T')[0],
         end_date || null,
         now,
         now,
+        alreadyAssigned?.team_name || null,
+        existingAssignment.team_name,
+        effective_date || now.split('T')[0],
+        profile_changes ? 1 : 0,
+        (req as any).captain?.id || null,
+        source_team_action || null,
       ]
     );
 
