@@ -276,6 +276,25 @@ apiRouter.put('/players/:id', requireCaptainAuth, (req: Request, res: Response) 
   res.json({ player: updated });
 });
 
+apiRouter.delete('/players', requireCaptainAuth, (req: Request, res: Response) => {
+  const count = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM players');
+  const deletedCount = count?.cnt || 0;
+
+  transaction(() => {
+    // Foreign-key cascades remove player-linked attendance, assignments,
+    // replacement records and participation rows while retaining sessions,
+    // matches, and the audit trail.
+    run('DELETE FROM players;');
+  });
+
+  logAudit('ALL_PLAYERS_DELETED', 'PLAYER', 'ALL', { deleted_count: deletedCount });
+  res.json({
+    success: true,
+    deletedCount,
+    message: `Permanently deleted ${deletedCount} player profile(s) and their linked records.`,
+  });
+});
+
 apiRouter.delete('/players/:id', requireCaptainAuth, (req: Request, res: Response) => {
   const { id } = req.params;
   const permanent = req.query.permanent === 'true';
