@@ -44,9 +44,17 @@ export function generateBalancedTeams(
   sessionId: string,
   randomSeedMultiplier = 1,
   requestedTeamCount: number = 3,
+  requestedPlayersPerTeam: number = 10,
 ): TeamGenerationResult {
   const teamCount: 2 | 3 = requestedTeamCount === 2 ? 2 : 3;
-  const uniquePlayers = [...new Map(availablePlayers.map(p => [p.id, p])).values()];
+  const playersPerTeam: 9 | 10 = requestedPlayersPerTeam === 9 ? 9 : 10;
+  const deduplicatedPlayers = [...new Map(availablePlayers.map(p => [p.id, p])).values()];
+  // If attendance exceeds total capacity, randomly select who plays this session;
+  // the next shuffle can select a different group. Team balance is optimized after selection.
+  const capacity = teamCount * playersPerTeam;
+  const uniquePlayers = deduplicatedPlayers.length > capacity
+    ? [...deduplicatedPlayers].sort(() => Math.random() - 0.5).slice(0, capacity)
+    : deduplicatedPlayers;
   const n = uniquePlayers.length;
   if (n < teamCount) throw new Error(`At least ${teamCount} available players are required.`);
 
