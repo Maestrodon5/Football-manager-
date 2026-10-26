@@ -210,6 +210,38 @@ export const migrations: Migration[] = [
       }
     },
   },
+,
+  {
+    version: 3,
+    name: '003_replacement_workflow_and_player_ratings',
+    up: (db: SqlJsDatabase) => {
+      const playerInfo = db.exec('PRAGMA table_info(players)');
+      const playerColumns = new Set((playerInfo[0]?.values || []).map(row => String(row[1])));
+      if (!playerColumns.has('secondary_position')) {
+        db.run('ALTER TABLE players ADD COLUMN secondary_position TEXT');
+      }
+      if (!playerColumns.has('skill_rating')) {
+        db.run('ALTER TABLE players ADD COLUMN skill_rating INTEGER');
+      }
+      db.run("UPDATE players SET skill_rating = CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END WHERE skill_rating IS NULL");
+
+      const replacementInfo = db.exec('PRAGMA table_info(player_replacements)');
+      const replacementColumns = new Set((replacementInfo[0]?.values || []).map(row => String(row[1])));
+      const additions: Array<[string, string]> = [
+        ['source_team_id', 'TEXT'],
+        ['destination_team_id', 'TEXT'],
+        ['effective_date', 'TEXT'],
+        ['profile_modified', 'INTEGER NOT NULL DEFAULT 0'],
+        ['created_by', 'TEXT'],
+        ['resolution_action', 'TEXT'],
+      ];
+      for (const [name, definition] of additions) {
+        if (!replacementColumns.has(name)) {
+          db.run(`ALTER TABLE player_replacements ADD COLUMN ${name} ${definition}`);
+        }
+      }
+    },
+  },
 
 ];
 
