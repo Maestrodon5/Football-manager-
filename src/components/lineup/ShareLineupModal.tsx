@@ -17,11 +17,6 @@ export const ShareLineupModal: React.FC<ShareLineupModalProps> = ({ session, ass
   const teamB = assignments.filter((a) => a.team_id === 'B');
   const teamC = assignments.filter((a) => a.team_id === 'C');
 
-  const formatTeamText = (name: string, members: any[]) => {
-    const names = members.map((member) => member.name).filter(Boolean);
-    return `${name}\n${names.length ? names.join('\n') : '(No players assigned)'}`;
-  };
-
   // Keep shared text simple: team headings and player names only.
   const shareText = `TEAM A
 ${teamA.map((member) => member.name).filter(Boolean).join('\n') || '(No players assigned)'}
