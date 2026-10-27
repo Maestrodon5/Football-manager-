@@ -409,7 +409,26 @@ apiRouter.get('/sessions/:id', (req: Request, res: Response) => {
     return;
   }
 
-  // Attendance records
+  // Backfill missing attendance rows for this session without changing any existing
+  // attendance decisions. This repairs older sessions created before the current squad
+  // was registered and is safe to run repeatedly.
+  const now = new Date().toISOString();
+  const activePlayers = queryAll<any>(
+    'SELECT id FROM players WHERE active = 1 AND archived_at IS NULL'
+  );
+  transaction(() => {
+    for (const player of activePlayers) {
+      run(
+        `INSERT INTO attendance_records
+          (id, weekly_session_id, player_id, status, notes, confirmed_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'pending', '', NULL, ?, ?)
+         ON CONFLICT(weekly_session_id, player_id) DO NOTHING;`,
+        [`ATT-${id}-${player.id}`, id, player.id, now, now]
+      );
+    }
+  });
+
+  // Attendance records (lowercase statuses are stored in SQLite; the UI uses uppercase).
   const attendanceSql = `
     SELECT ar.id, ar.weekly_session_id as session_id, ar.player_id,
            UPPER(ar.status) as status,
@@ -418,6 +437,7 @@ apiRouter.get('/sessions/:id', (req: Request, res: Response) => {
     FROM attendance_records ar
     JOIN players p ON ar.player_id = p.id
     WHERE ar.weekly_session_id = ?
+      AND p.archived_at IS NULL
     ORDER BY p.position, p.full_name
   `;
   const attendance = queryAll<any>(attendanceSql, [id]);
