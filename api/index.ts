@@ -1,65 +1,65 @@
 import express, { Request, Response } from 'express';
-import { getDb } from '../src/server/db.js';
-import { apiRouter } from '../src/server/api.js';
+import jwt from 'jsonwebtoken';
+import { createHash } from 'node:crypto';
 
 const app = express();
-
-// Parse incoming JSON requests up to 15MB (for team photos, database backup/restore)
 app.use(express.json({ limit: '15mb' }));
 
-// Ensure SQLite database is fully initialized and seeded
-let dbInitPromise: Promise<any> | null = null;
-async function ensureDb() {
-  if (!dbInitPromise) {
-    dbInitPromise = getDb().catch((err) => {
-      console.error('[Vercel Serverless] Failed to initialize SQLite database:', err);
-      dbInitPromise = null;
-      throw err;
-    });
-  }
-  return dbInitPromise;
+function requestHash(path: string, method: string, body: unknown, authorization: string) {
+  return createHash('sha256')
+    .update(path + "\n" + method + "\n" + JSON.stringify(body ?? null) + "\n" + authorization)
+    .digest('hex');
 }
 
-// Middleware ensuring database ready before processing any request
-app.use(async (req: Request, res: Response, next) => {
-  try {
-    await ensureDb();
-    next();
-  } catch (err: any) {
-    res.status(500).json({ error: 'Database initialization failed: ' + (err?.message || err) });
+async function proxyRequest(req: Request, res: Response) {
+  const backendBase = process.env.FLOOT_BACKEND_URL;
+  const privateKey = process.env.FLOOT_PROXY_PRIVATE_KEY;
+  if (!backendBase || !privateKey) {
+    return res.status(503).json({ error: 'Persistent backend is not connected yet. Missing backend configuration.' });
   }
-});
 
-// Health check endpoints
-app.get('/api/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    service: 'PitchMaster FC Manager (Vercel Serverless)',
-    timestamp: new Date().toISOString(),
-    mode: 'production',
-  });
-});
+  const path = req.originalUrl || req.url || req.path;
+  if (!path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API route not found.' });
+  }
+  const method = req.method.toUpperCase();
+  if (!['GET', 'POST', 'PUT', 'DELETE'].includes(method)) {
+    return res.status(405).json({ error: 'Method not allowed.' });
+  }
 
-app.get('/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    service: 'PitchMaster FC Manager (Vercel Serverless)',
-    timestamp: new Date().toISOString(),
-    mode: 'production',
-  });
-});
+  const body = req.body ?? null;
+  const authorization = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+  const bodyHash = requestHash(path, method, body, authorization);
+  const signedProxyToken = jwt.sign(
+    { path, method, bodyHash },
+    privateKey.replace(/\\n/g, '\n'),
+    { algorithm: 'RS256', issuer: 'pitchmaster-vercel-proxy', audience: 'pitchmaster-backend', expiresIn: '30s' }
+  );
 
-// Mount the router on both '/api' and '/' to guarantee matches regardless of rewrite path normalization
-app.use('/api', apiRouter);
-app.use('/', apiRouter);
+  try {
+    const target = new URL('/_api/api-dispatch', backendBase);
+    const upstream = await fetch(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Pitchmaster-Proxy': signedProxyToken,
+      },
+      body: JSON.stringify({ path, method, body, authorization }),
+      cache: 'no-store',
+    });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(text);
+  } catch (error: any) {
+    console.error('[PitchMaster API proxy] Backend request failed:', error?.message || error);
+    return res.status(502).json({ error: 'Persistent backend is temporarily unavailable. No success was reported.' });
+  }
+}
 
-// Export for Vercel Serverless Functions
+app.all('*', (req, res) => { void proxyRequest(req, res); });
+
 export default async function handler(req: any, res: any) {
-  try {
-    await ensureDb();
-  } catch (err: any) {
-    console.error('[Vercel Serverless Handler] DB init error:', err);
-    return res.status(500).json({ error: 'Database startup error' });
-  }
   return app(req, res);
 }
