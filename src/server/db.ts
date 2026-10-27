@@ -1,8 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'node:module';
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import { runMigrations } from './migrations.js';
 import { seedDatabase } from './seed.js';
+
+// Resolve package assets explicitly in ESM and Vercel serverless bundles.
+const require = createRequire(import.meta.url);
+const SQL_WASM_DIR = path.dirname(require.resolve('sql.js'));
 
 // Resolve project root deterministically
 const PROJECT_ROOT = process.cwd();
@@ -37,7 +42,10 @@ export async function getDb(): Promise<SqlJsDatabase> {
     console.warn(`[Database] Notice creating directory ${DB_DIR}:`, err);
   }
 
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs({
+    // Vercel's function bundle does not always preserve sql.js's relative WASM lookup.
+    locateFile: (file) => path.join(SQL_WASM_DIR, file),
+  });
 
   // Load existing database without overwriting, or create new if not present
   if (fs.existsSync(DB_FILE)) {
