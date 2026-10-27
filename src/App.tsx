@@ -177,10 +177,27 @@ export default function App() {
   };
 
   const handleGenerateTeams = async () => {
-    if (!activeSession) return;
+    if (generatingTeams) return;
+    if (!activeSession) {
+      alert('There is no weekly session to generate teams for yet. Create or select a weekly session first. Your players have not been changed.');
+      return;
+    }
     if (!isCaptain) {
       alert('Personal captain access is not available. Check that PERSONAL_MODE=true and JWT_SECRET is configured on your private deployment.');
       return;
+    }
+
+    const confirmedCount = attendance.filter((item) => item.status === 'CONFIRMED').length;
+    const pendingCount = attendance.filter((item) => item.status === 'PENDING').length;
+    let includePending = false;
+    if (confirmedCount === 0 && pendingCount > 0) {
+      includePending = confirm(
+        `No players are confirmed yet, but ${pendingCount} players are registered as pending. Generate teams using these pending players anyway? This will not change their attendance status.`
+      );
+      if (!includePending) {
+        setCurrentTab('attendance');
+        return;
+      }
     }
 
     try {
@@ -188,12 +205,13 @@ export default function App() {
       const res = await api.generateTeams(activeSession.id, {
         reason: 'Manual Captain Lineup Optimization',
         players_per_team: playersPerTeam,
+        include_pending: includePending,
       });
       setGenerationMeta(res.result.balance_explanation);
       await loadAllData();
       setCurrentTab('pitch');
     } catch (err: any) {
-      alert(err.message || 'Team generation failed');
+      alert(`${err.message || 'Team generation failed'}\n\nYour player profiles and attendance records have not been intentionally deleted.`);
     } finally {
       setGeneratingTeams(false);
     }
