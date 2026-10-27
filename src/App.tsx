@@ -651,11 +651,11 @@ export default function App() {
             {/* Team Roster Cards (A, B, C) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Team A */}
-              {renderTeamCard('A', 'Team A (Emerald)', '#10b981', teamA, isCaptain, isLocked, setReplacingPlayer)}
+              {renderTeamCard('A', 'Team A (Emerald)', '#10b981', teamA, weeklyTeamsRecord?.captains?.find((captain: any) => captain.team_id === 'A')?.name, isCaptain, isLocked, setReplacingPlayer)}
               {/* Team B */}
-              {renderTeamCard('B', 'Team B (Cobalt)', '#38bdf8', teamB, isCaptain, isLocked, setReplacingPlayer)}
+              {renderTeamCard('B', 'Team B (Cobalt)', '#38bdf8', teamB, weeklyTeamsRecord?.captains?.find((captain: any) => captain.team_id === 'B')?.name, isCaptain, isLocked, setReplacingPlayer)}
               {/* Team C */}
-              {teamCount === 3 && renderTeamCard('C', 'Team C (Gold)', '#fbbf24', teamC, isCaptain, isLocked, setReplacingPlayer)}
+              {teamCount === 3 && renderTeamCard('C', 'Team C (Gold)', '#fbbf24', teamC, weeklyTeamsRecord?.captains?.find((captain: any) => captain.team_id === 'C')?.name, isCaptain, isLocked, setReplacingPlayer)}
             </div>
 
             {/* Algorithm Balance Report */}
@@ -832,6 +832,7 @@ function renderTeamCard(
   name: string,
   color: string,
   players: any[],
+  captainName: string | undefined,
   isCaptain: boolean,
   isLocked: boolean,
   onReplace: (p: any) => void
@@ -860,6 +861,7 @@ function renderTeamCard(
               <span className="text-[11px] text-slate-400">
                 {players.length} Players ({strikers.length} ST · {midfielders.length} MF · {defenders.length} DF)
               </span>
+              {captainName && <div className="mt-1 text-[10px] font-bold text-amber-300">Captain: {captainName}</div>}
             </div>
           </div>
 
