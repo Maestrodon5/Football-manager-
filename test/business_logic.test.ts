@@ -189,6 +189,21 @@ async function runAllTests() {
     assert.ok(res.balance_explanation.limitations.length > 0, 'Shortfall recorded in metadata');
   });
 
+  test('Two-team mode balances 30 players into two teams and leaves Team C empty', () => {
+    const res = generateBalancedTeams(testPlayers, 'SESSION-ALG-2', 1, 2);
+    assert.strictEqual(res.teams.A.players.length, 15);
+    assert.strictEqual(res.teams.B.players.length, 15);
+    assert.strictEqual(res.teams.C.players.length, 0);
+    const ids = [...res.teams.A.players, ...res.teams.B.players, ...res.teams.C.players].map(p => p.id);
+    assert.strictEqual(new Set(ids).size, 30, 'Every player must be assigned exactly once');
+  });
+
+  test('Two-team mode handles attendance counts that do not divide evenly', () => {
+    const res = generateBalancedTeams(testPlayers.slice(0, 27), 'SESSION-ALG-2-ODD', 1, 2);
+    assert.deepStrictEqual([res.teams.A.players.length, res.teams.B.players.length], [14, 13]);
+    assert.strictEqual(res.teams.C.players.length, 0);
+  });
+
   // ---------------------------------------------------------
   // TEST GROUP 4: MATCH ROTATION & WINNER-STAYS
   // ---------------------------------------------------------

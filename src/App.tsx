@@ -17,7 +17,6 @@ import {
   ArrowRightLeft,
   Settings as SettingsIcon,
   BarChart3,
-  LogOut,
   ChevronRight,
   RefreshCw,
 } from 'lucide-react';
@@ -41,7 +40,6 @@ import { ReplacementModal } from './components/replacements/ReplacementModal.js'
 import { SquadManagement } from './components/squad/SquadManagement.js';
 import { ParticipationStatsView } from './components/stats/ParticipationStatsView.js';
 import { SettingsAndAudit } from './components/settings/SettingsAndAudit.js';
-import { CaptainLoginModal } from './components/auth/CaptainLoginModal.js';
 
 // Assets
 import heroBannerImg from './assets/images/hero_pitch_tactics_1793001062410.jpg';
@@ -62,7 +60,6 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
   const [isCaptain, setIsCaptain] = useState<boolean>(false);
   const [captainProfile, setCaptainProfile] = useState<any | null>(null);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   // Core Data
   const [loading, setLoading] = useState<boolean>(true);
@@ -73,6 +70,8 @@ export default function App() {
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [settings, setSettings] = useState<ScheduleSettings | null>(null);
+  const [teamCount, setTeamCount] = useState<2 | 3>(3);
+  const [playersPerTeam, setPlayersPerTeam] = useState<9 | 10>(10);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [statsData, setStatsData] = useState<{ total_club_matches: number; player_statistics: any[] }>({
     total_club_matches: 0,
@@ -141,6 +140,7 @@ export default function App() {
       // Load settings
       const settingsRes = await api.getSettings();
       setSettings(settingsRes.settings);
+      setTeamCount(Number(settingsRes.settings.team_count) === 2 ? 2 : 3);
 
       // Load stats
       const statsRes = await api.getStatistics();
@@ -164,30 +164,84 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    api.logout();
-    setIsCaptain(false);
-    setCaptainProfile(null);
-    setAuditLogs([]);
+  const handleTeamCountChange = async (value: string) => {
+    const next: 2 | 3 = value === '2' ? 2 : 3;
+    setTeamCount(next);
+    try {
+      await api.updateSettings({ team_count: next });
+      setSettings(prev => prev ? { ...prev, team_count: next } : prev);
+    } catch (err: any) {
+      alert(err.message || 'Could not save team count.');
+      setTeamCount(Number(settings?.team_count) === 2 ? 2 : 3);
+    }
   };
 
   const handleGenerateTeams = async () => {
-    if (!activeSession) return;
-    if (!isCaptain) {
-      setShowLoginModal(true);
+    if (generatingTeams) return;
+    if (!activeSession) {
+      alert('There is no weekly session to generate teams for yet. Create or select a weekly session first. Your players have not been changed.');
       return;
+    }
+    if (!isCaptain) {
+      alert('Personal captain access is not available. Check that PERSONAL_MODE=true and JWT_SECRET is configured on your private deployment.');
+      return;
+    }
+
+    const confirmedCount = attendance.filter((item) => item.status === 'CONFIRMED').length;
+    const pendingCount = attendance.filter((item) => item.status === 'PENDING').length;
+    let includePending = false;
+    if (confirmedCount === 0 && pendingCount > 0) {
+      includePending = confirm(
+        `No players are confirmed yet, but ${pendingCount} players are registered as pending. Generate teams using these pending players anyway? This will not change their attendance status.`
+      );
+      if (!includePending) {
+        setCurrentTab('attendance');
+        return;
+      }
+    }
+
+    const teamIds: Array<'A' | 'B' | 'C'> = teamCount === 2 ? ['A', 'B'] : ['A', 'B', 'C'];
+    const eligibleForGeneration = attendance.filter((item) =>
+      item.status === 'CONFIRMED' || (includePending && item.status === 'PENDING')
+    );
+    if (eligibleForGeneration.length < teamIds.length) {
+      alert(`At least ${teamIds.length} eligible players are required to select team captains.`);
+      setCurrentTab('attendance');
+      return;
+    }
+    const captainSelections: Record<string, string> = {};
+    const remainingCaptainChoices = [...eligibleForGeneration];
+    for (const teamId of teamIds) {
+      const options = remainingCaptainChoices
+        .map((item, index) => `${index + 1}. ${item.name} — ${item.position}, ${item.skill_level}`)
+        .join('\\n');
+      const answer = window.prompt(
+        `Choose captain for Team ${teamId} by entering the player's number. Each player can captain only one team.\\n\\n${options}`
+      );
+      if (answer === null) return;
+      const choice = Number.parseInt(answer.trim(), 10);
+      if (!Number.isInteger(choice) || choice < 1 || choice > remainingCaptainChoices.length) {
+        alert('Invalid captain selection. Team generation was cancelled; no teams were changed.');
+        return;
+      }
+      const [chosen] = remainingCaptainChoices.splice(choice - 1, 1);
+      captainSelections[teamId] = chosen.player_id;
     }
 
     try {
       setGeneratingTeams(true);
       const res = await api.generateTeams(activeSession.id, {
         reason: 'Manual Captain Lineup Optimization',
+        players_per_team: playersPerTeam,
+        team_count: teamCount,
+        include_pending: includePending,
+        captains: captainSelections,
       });
       setGenerationMeta(res.result.balance_explanation);
       await loadAllData();
       setCurrentTab('pitch');
     } catch (err: any) {
-      alert(err.message || 'Team generation failed');
+      alert(`${err.message || 'Team generation failed'}\n\nYour player profiles and attendance records have not been intentionally deleted.`);
     } finally {
       setGeneratingTeams(false);
     }
@@ -317,31 +371,32 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Zone 3: 1 Primary Action + Captain Auth status */}
+          {/* Personal single-owner mode: no login screen or sign-out control */}
           <div className="flex items-center gap-3 shrink-0">
             <PWAInstallButton className="hidden sm:inline-flex" />
-
             {isCaptain ? (
-              <div className="flex items-center gap-2">
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800 text-[11px] font-bold text-emerald-300">
-                  <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Captain Authenticated</span>
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"
-                  title="Captain Sign Out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold bg-emerald-950/80 border-emerald-800 text-emerald-300">
+                <Shield className="w-3.5 h-3.5" />
+                <span>Captain Mode Active</span>
+              </span>
             ) : (
               <button
-                onClick={() => setShowLoginModal(true)}
-                className="py-1.5 px-3.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 hover:border-slate-600 text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                type="button"
+                onClick={async () => {
+                  try {
+                    const session = await api.autoLogin();
+                    setIsCaptain(true);
+                    setCaptainProfile(session.captain);
+                    await loadAllData();
+                    alert('Captain mode activated.');
+                  } catch (error: any) {
+                    alert(error?.message || 'Captain access is not configured. Enable it only on a private, protected deployment.');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-bold bg-amber-950/60 border-amber-800 text-amber-200 hover:bg-amber-900/70"
               >
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Captain Login</span>
+                <Shield className="w-3.5 h-3.5" />
+                <span>Activate Captain Role</span>
               </button>
             )}
           </div>
@@ -519,13 +574,33 @@ export default function App() {
                   )}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Session: {activeSession?.session_date || 'Wednesday'} · 30 Players Distributed Across 3 Teams
+                  Session: {activeSession?.session_date || 'Wednesday'} · {players.length} registered players · {teamCount} teams
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 {isCaptain && (
                   <>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                      Teams
+                      <select value={teamCount} onChange={e => handleTeamCountChange(e.target.value)} disabled={generatingTeams || isLocked} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+                        <option value={2}>2 teams</option>
+                        <option value={3}>3 teams</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <span>Players per team</span>
+                      <select
+                        aria-label="Players per team"
+                        value={playersPerTeam}
+                        onChange={(e) => setPlayersPerTeam(Number(e.target.value) === 9 ? 9 : 10)}
+                        disabled={generatingTeams || isLocked}
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-50"
+                      >
+                        <option value={9}>9 players</option>
+                        <option value={10}>10 players</option>
+                      </select>
+                    </label>
                     <button
                       onClick={handleGenerateTeams}
                       disabled={generatingTeams || isLocked}
@@ -562,10 +637,11 @@ export default function App() {
             {/* Tactical Pitch View Component */}
             <TacticalPitchView
               assignments={assignments}
+              isCaptain={isCaptain}
               isLocked={isLocked}
               onReplacePlayer={(player) => {
                 if (!isCaptain) {
-                  setShowLoginModal(true);
+                  alert('Personal captain access is not available. Check that PERSONAL_MODE=true and JWT_SECRET is configured on your private deployment.');
                   return;
                 }
                 setReplacingPlayer(player);
@@ -575,11 +651,11 @@ export default function App() {
             {/* Team Roster Cards (A, B, C) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Team A */}
-              {renderTeamCard('A', 'Team A (Emerald)', '#10b981', teamA, isCaptain, isLocked, setReplacingPlayer)}
+              {renderTeamCard('A', 'Team A (Emerald)', '#10b981', teamA, weeklyTeamsRecord?.captains?.find((captain: any) => captain.team_id === 'A')?.name, isCaptain, isLocked, setReplacingPlayer)}
               {/* Team B */}
-              {renderTeamCard('B', 'Team B (Cobalt)', '#38bdf8', teamB, isCaptain, isLocked, setReplacingPlayer)}
+              {renderTeamCard('B', 'Team B (Cobalt)', '#38bdf8', teamB, weeklyTeamsRecord?.captains?.find((captain: any) => captain.team_id === 'B')?.name, isCaptain, isLocked, setReplacingPlayer)}
               {/* Team C */}
-              {renderTeamCard('C', 'Team C (Gold)', '#fbbf24', teamC, isCaptain, isLocked, setReplacingPlayer)}
+              {teamCount === 3 && renderTeamCard('C', 'Team C (Gold)', '#fbbf24', teamC, weeklyTeamsRecord?.captains?.find((captain: any) => captain.team_id === 'C')?.name, isCaptain, isLocked, setReplacingPlayer)}
             </div>
 
             {/* Algorithm Balance Report */}
@@ -629,14 +705,19 @@ export default function App() {
         )}
 
         {/* MATCH ROTATION & TIMER */}
-        {currentTab === 'rotation' && (
+        {currentTab === 'rotation' && (teamCount === 3 ? (
           <MatchRotationLive
             sessionId={activeSession?.id || ''}
             isCaptain={isCaptain}
             onMatchUpdated={loadAllData}
             matches={matches}
           />
-        )}
+        ) : (
+          <div className="rounded-2xl border border-amber-700/60 bg-amber-950/30 p-6 text-amber-100">
+            <h2 className="text-lg font-bold">Three-team rotation is turned off</h2>
+            <p className="mt-2 text-sm text-amber-200">Winner-stays rotation requires three teams. Switch back to 3 teams on the Pitch tab to use the match timer.</p>
+          </div>
+        ))}
 
         {/* SQUAD MANAGEMENT (PLAYERS DIRECTORY) */}
         {currentTab === 'squad' && (
@@ -741,17 +822,6 @@ export default function App() {
         />
       )}
 
-      {/* CAPTAIN LOGIN MODAL */}
-      {showLoginModal && (
-        <CaptainLoginModal
-          onClose={() => setShowLoginModal(false)}
-          onLoginSuccess={(capt) => {
-            setIsCaptain(true);
-            setCaptainProfile(capt);
-            loadAllData();
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -762,6 +832,7 @@ function renderTeamCard(
   name: string,
   color: string,
   players: any[],
+  captainName: string | undefined,
   isCaptain: boolean,
   isLocked: boolean,
   onReplace: (p: any) => void
@@ -790,11 +861,12 @@ function renderTeamCard(
               <span className="text-[11px] text-slate-400">
                 {players.length} Players ({strikers.length} ST · {midfielders.length} MF · {defenders.length} DF)
               </span>
+              {captainName && <div className="mt-1 text-[10px] font-bold text-amber-300">Captain: {captainName}</div>}
             </div>
           </div>
 
           <span className="text-xs font-mono font-bold" style={{ color }}>
-            10 Slots
+            {players.length} Slots
           </span>
         </div>
 
@@ -839,10 +911,11 @@ function renderTeamCard(
                 {isCaptain && !isLocked && (
                   <button
                     onClick={() => onReplace(p)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                    className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-200 transition hover:bg-slate-700"
                     title="Replace player"
                   >
-                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                    <span>Replace</span>
                   </button>
                 )}
               </div>

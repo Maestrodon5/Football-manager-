@@ -199,6 +199,50 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: '002_team_count',
+    up: (db: SqlJsDatabase) => {
+      const columns = db.exec("PRAGMA table_info(scheduling_settings)");
+      const names = new Set((columns[0]?.values || []).map(row => String(row[1])));
+      if (!names.has('team_count')) {
+        db.run("ALTER TABLE scheduling_settings ADD COLUMN team_count INTEGER NOT NULL DEFAULT 3 CHECK(team_count IN (2, 3));");
+      }
+    },
+  },
+  {
+    version: 3,
+    name: '003_replacement_workflow_and_player_ratings',
+    up: (db: SqlJsDatabase) => {
+      const playerInfo = db.exec('PRAGMA table_info(players)');
+      const playerColumns = new Set((playerInfo[0]?.values || []).map(row => String(row[1])));
+      if (!playerColumns.has('secondary_position')) {
+        db.run('ALTER TABLE players ADD COLUMN secondary_position TEXT');
+      }
+      if (!playerColumns.has('skill_rating')) {
+        db.run('ALTER TABLE players ADD COLUMN skill_rating INTEGER');
+      }
+      db.run("UPDATE players SET skill_rating = CASE skill_level WHEN 'Top' THEN 9 WHEN 'Medium' THEN 6 ELSE 3 END WHERE skill_rating IS NULL");
+
+      const replacementInfo = db.exec('PRAGMA table_info(player_replacements)');
+      const replacementColumns = new Set((replacementInfo[0]?.values || []).map(row => String(row[1])));
+      const additions: Array<[string, string]> = [
+        ['source_team_id', 'TEXT'],
+        ['destination_team_id', 'TEXT'],
+        ['effective_date', 'TEXT'],
+        ['profile_modified', 'INTEGER NOT NULL DEFAULT 0'],
+        ['created_by', 'TEXT'],
+        ['resolution_action', 'TEXT'],
+        ['source_fill_player_id', 'TEXT'],
+      ];
+      for (const [name, definition] of additions) {
+        if (!replacementColumns.has(name)) {
+          db.run(`ALTER TABLE player_replacements ADD COLUMN ${name} ${definition}`);
+        }
+      }
+    },
+  },
+
 ];
 
 export function runMigrations(db: SqlJsDatabase) {

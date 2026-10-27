@@ -7,6 +7,7 @@ interface TacticalPitchViewProps {
   onSelectPlayer?: (player: any) => void;
   onReplacePlayer?: (player: any) => void;
   isLocked?: boolean;
+  isCaptain?: boolean;
 }
 
 export const TacticalPitchView: React.FC<TacticalPitchViewProps> = ({
@@ -14,6 +15,7 @@ export const TacticalPitchView: React.FC<TacticalPitchViewProps> = ({
   onSelectPlayer,
   onReplacePlayer,
   isLocked,
+  isCaptain,
 }) => {
   const [selectedTeam, setSelectedTeam] = useState<TeamId | 'ALL'>('A');
 
@@ -126,7 +128,7 @@ export const TacticalPitchView: React.FC<TacticalPitchViewProps> = ({
             </span>
           </div>
           <div className="flex flex-wrap justify-center items-center gap-2 sm:gap-4 max-w-4xl mx-auto">
-            {strikers.map((p) => renderPlayerCard(p, getTeamColor, getSkillBadge, onSelectPlayer, onReplacePlayer, isLocked))}
+            {strikers.map((p) => renderPlayerCard(p, getTeamColor, getSkillBadge, onSelectPlayer, onReplacePlayer, isLocked, isCaptain))}
           </div>
         </div>
 
@@ -173,7 +175,8 @@ function renderPlayerCard(
   getSkillBadge: (s: string) => string,
   onSelectPlayer?: (p: any) => void,
   onReplacePlayer?: (p: any) => void,
-  isLocked?: boolean
+  isLocked?: boolean,
+  isCaptain?: boolean
 ) {
   const colors = getTeamColor(p.team_id);
 
@@ -212,16 +215,17 @@ function renderPlayerCard(
       </div>
 
       {/* Quick Action Trigger */}
-      {!isLocked && onReplacePlayer && (
+      {isCaptain && !isLocked && onReplacePlayer && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             onReplacePlayer(p);
           }}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition-opacity"
+          className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-200 transition hover:bg-slate-700"
           title="Replace player"
         >
-          <ArrowRightLeft className="w-3.5 h-3.5" />
+          <ArrowRightLeft className="h-3.5 w-3.5" />
+          <span>Replace</span>
         </button>
       )}
     </div>

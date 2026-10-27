@@ -139,6 +139,19 @@ export const api = {
     });
   },
 
+  async deleteAllPlayers(): Promise<{ success: boolean; archivedCount: number; message: string }> {
+    return apiFetch<{ success: boolean; archivedCount: number; message: string }>('/api/players', {
+      method: 'DELETE',
+    });
+  },
+
+  async permanentlyDeleteAllPlayers(confirmation: string): Promise<{ success: boolean; deletedCount: number; message: string }> {
+    return apiFetch<{ success: boolean; deletedCount: number; message: string }>('/api/players/permanent', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation }),
+    });
+  },
+
   // Weekly Sessions & Attendance
   async getSessions(): Promise<{ sessions: WeeklySession[] }> {
     return apiFetch<{ sessions: WeeklySession[] }>('/api/sessions');
@@ -172,7 +185,7 @@ export const api = {
   },
 
   // Team Generation & Locking
-  async generateTeams(sessionId: string, options: { include_pending?: boolean; reason?: string } = {}): Promise<{ result: TeamGenerationResult }> {
+  async generateTeams(sessionId: string, options: { include_pending?: boolean; reason?: string; players_per_team?: 9 | 10; team_count?: 2 | 3; captains?: Record<'A' | 'B' | 'C', string> } = {}): Promise<{ result: TeamGenerationResult }> {
     return apiFetch<{ result: TeamGenerationResult }>(`/api/sessions/${sessionId}/generate-teams`, {
       method: 'POST',
       body: JSON.stringify(options),
@@ -200,7 +213,7 @@ export const api = {
   async getReplacementRecommendations(
     sessionId: string,
     playerId: string
-  ): Promise<{ original_player: Player; recommendations: any[] }> {
+  ): Promise<{ original_player: Player; recommendations: any[]; team_lineups: any[]; repeated_teammate_pairs: any[] }> {
     return apiFetch(`/api/sessions/${sessionId}/replacements/recommendations?player_id=${playerId}`);
   },
 

@@ -37,8 +37,32 @@ export default defineConfig(() => {
             },
           ],
         },
+        // The installed PWA and website use the same origin, frontend build, and /api backend.
+        // Never cache API responses: player, attendance, lineup, settings and replacement data
+        // must always come from the shared server, not stale per-device service-worker storage.
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
+          navigateFallback: '/index.html',
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+              handler: 'NetworkOnly',
+              method: 'GET',
+              options: { cacheName: 'pitchmaster-api-no-cache' },
+            },
+            {
+              urlPattern: ({ request, url }) => request.mode === 'navigate' && url.origin === self.location.origin,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'pitchmaster-navigation',
+                networkTimeoutSeconds: 5,
+                expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 },
+              },
+            },
+          ],
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
         },
         devOptions: {
           enabled: false, // Keep dev fast and lightweight

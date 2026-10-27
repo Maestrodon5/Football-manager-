@@ -20,6 +20,8 @@ export interface Player {
   id: string;
   name: string;
   position: Position;
+  secondary_position?: Position | null;
+  skill_rating?: number;
   skill_level: SkillLevel;
   is_active: boolean;
   is_archived: boolean;
@@ -162,6 +164,7 @@ export interface PlayerParticipation {
 export interface ScheduleSettings {
   id: string;
   day_of_week: string; // "Wednesday"
+  team_count: 2 | 3;
   match_time: string; // "15:00"
   timezone: string; // "Africa/Addis_Ababa"
   confirmation_deadline_time: string; // "14:30"
