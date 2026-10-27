@@ -27,10 +27,30 @@ ${teamB.map((member) => member.name).filter(Boolean).join('\n') || '(No players 
 TEAM C
 ${teamC.map((member) => member.name).filter(Boolean).join('\n') || '(No players assigned)'}` : ''}`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(shareText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareText);
+      } else {
+        // Clipboard API is often unavailable in installed PWAs and older mobile browsers.
+        const textarea = document.createElement('textarea');
+        textarea.value = shareText;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) throw new Error('Clipboard access is unavailable on this device.');
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch (err: any) {
+      console.error('Copy lineup failed:', err);
+      alert('Could not copy automatically. Select the lineup text in the preview, then choose Copy from your device menu.');
+    }
   };
 
   const handleNativeShare = async () => {
@@ -40,12 +60,13 @@ ${teamC.map((member) => member.name).filter(Boolean).join('\n') || '(No players 
           title: `PitchMaster FC — Teams for ${session.session_date}`,
           text: shareText,
         });
-      } catch (err) {
-        // User cancelled or unsupported
+        return;
+      } catch (err: any) {
+        // Cancellation is not an error; unsupported share targets fall back to copy.
+        if (err?.name === 'AbortError') return;
       }
-    } else {
-      handleCopy();
     }
+    await handleCopy();
   };
 
   // Generate and download a canvas lineup graphic
