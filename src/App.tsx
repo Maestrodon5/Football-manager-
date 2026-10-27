@@ -200,12 +200,42 @@ export default function App() {
       }
     }
 
+    const teamIds: Array<'A' | 'B' | 'C'> = teamCount === 2 ? ['A', 'B'] : ['A', 'B', 'C'];
+    const eligibleForGeneration = attendance.filter((item) =>
+      item.status === 'CONFIRMED' || (includePending && item.status === 'PENDING')
+    );
+    if (eligibleForGeneration.length < teamIds.length) {
+      alert(`At least ${teamIds.length} eligible players are required to select team captains.`);
+      setCurrentTab('attendance');
+      return;
+    }
+    const captainSelections: Record<string, string> = {};
+    const remainingCaptainChoices = [...eligibleForGeneration];
+    for (const teamId of teamIds) {
+      const options = remainingCaptainChoices
+        .map((item, index) => `${index + 1}. ${item.name} — ${item.position}, ${item.skill_level}`)
+        .join('\\n');
+      const answer = window.prompt(
+        `Choose captain for Team ${teamId} by entering the player's number. Each player can captain only one team.\\n\\n${options}`
+      );
+      if (answer === null) return;
+      const choice = Number.parseInt(answer.trim(), 10);
+      if (!Number.isInteger(choice) || choice < 1 || choice > remainingCaptainChoices.length) {
+        alert('Invalid captain selection. Team generation was cancelled; no teams were changed.');
+        return;
+      }
+      const [chosen] = remainingCaptainChoices.splice(choice - 1, 1);
+      captainSelections[teamId] = chosen.player_id;
+    }
+
     try {
       setGeneratingTeams(true);
       const res = await api.generateTeams(activeSession.id, {
         reason: 'Manual Captain Lineup Optimization',
         players_per_team: playersPerTeam,
+        team_count: teamCount,
         include_pending: includePending,
+        captains: captainSelections,
       });
       setGenerationMeta(res.result.balance_explanation);
       await loadAllData();
