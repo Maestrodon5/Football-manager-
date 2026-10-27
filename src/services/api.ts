@@ -185,7 +185,7 @@ export const api = {
   },
 
   // Team Generation & Locking
-  async generateTeams(sessionId: string, options: { include_pending?: boolean; reason?: string; players_per_team?: 9 | 10 } = {}): Promise<{ result: TeamGenerationResult }> {
+  async generateTeams(sessionId: string, options: { include_pending?: boolean; reason?: string; players_per_team?: 9 | 10; team_count?: 2 | 3; captains?: Record<'A' | 'B' | 'C', string> } = {}): Promise<{ result: TeamGenerationResult }> {
     return apiFetch<{ result: TeamGenerationResult }>(`/api/sessions/${sessionId}/generate-teams`, {
       method: 'POST',
       body: JSON.stringify(options),
