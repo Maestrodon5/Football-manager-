@@ -107,6 +107,16 @@ app.get('/api/__integration-test', async (_req, res) => {
     record('Three teams of ten', teamCounts.every(count => count === 10), teamCounts);
     record('Three distinct persisted captains', details.data.weeklyTeamsRecord?.captains?.length === 3 && new Set(details.data.weeklyTeamsRecord.captains.map((c: any) => c.player_id)).size === 3, details.data.weeklyTeamsRecord?.captains);
 
+    const firstDistribution = new Map(assignments.map((a: any) => [a.player_id, a.team_id]));
+    const regenerated = await callBackend('/api/sessions/' + sessionId + '/generate-teams', 'POST', {
+      team_count: 3, players_per_team: 10, include_pending: false,
+      captains: { A: createdIds[0], B: createdIds[1], C: createdIds[2] },
+    }, auth);
+    const secondDetails = await callBackend('/api/sessions/' + sessionId, 'GET');
+    const secondAssignments = secondDetails.data.assignments || [];
+    const changedTeams = secondAssignments.filter((a: any) => firstDistribution.get(a.player_id) !== a.team_id).length;
+    record('Repeated generation randomizes assignments', regenerated.status === 200 && changedTeams > 0, { changedPlayers: changedTeams });
+
     const archive = await callBackend('/api/players/' + createdIds[29], 'DELETE', null, auth);
     const activeAfterRemove = await callBackend('/api/players?search=' + encodeURIComponent(prefix), 'GET');
     const allAfterRemove = await callBackend('/api/players?search=' + encodeURIComponent(prefix) + '&includeArchived=true', 'GET');
