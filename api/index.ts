@@ -63,6 +63,8 @@ app.get('/api/__integration-test', async (_req, res) => {
   let sessionId = '';
   let auth = '';
   const checks: Array<{ name: string; pass: boolean; details?: unknown }> = [];
+  let finalStatus = 200;
+  let finalPayload: any = null;
   const record = (name: string, pass: boolean, details?: unknown) => checks.push({ name, pass, details });
   try {
     const health = await callBackend('/api/health', 'GET');
@@ -111,10 +113,12 @@ app.get('/api/__integration-test', async (_req, res) => {
     record('Remove persists after another request', archive.status === 200 && activeAfterRemove.data.players.length === 29 && allAfterRemove.data.players.length === 30, { active: activeAfterRemove.data.players?.length, includingArchived: allAfterRemove.data.players?.length });
 
     const failed = checks.filter(c => !c.pass);
-    return res.status(failed.length ? 500 : 200).json({ status: failed.length ? 'failed' : 'passed', checks, cleanup: 'in progress' });
+    finalStatus = failed.length ? 500 : 200;
+    finalPayload = { status: failed.length ? 'failed' : 'passed', checks };
   } catch (error: any) {
     record('Integration flow', false, error?.message || String(error));
-    return res.status(500).json({ status: 'failed', checks, error: error?.message || String(error), cleanup: 'in progress' });
+    finalStatus = 500;
+    finalPayload = { status: 'failed', checks, error: error?.message || String(error) };
   } finally {
     // Cleanup is isolated to IDs created by this test run.
     try {
@@ -124,8 +128,11 @@ app.get('/api/__integration-test', async (_req, res) => {
       }
     } catch (cleanupError: any) {
       console.error('[PitchMaster integration test] Cleanup warning:', cleanupError?.message || cleanupError);
+      finalStatus = 500;
+      finalPayload = { ...(finalPayload || {}), status: 'failed', cleanupError: cleanupError?.message || String(cleanupError) };
     }
   }
+  return res.status(finalStatus).json(finalPayload);
 });
 
 app.all('*', (req, res) => { void proxyRequest(req, res); });
